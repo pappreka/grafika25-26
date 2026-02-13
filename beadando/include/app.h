@@ -19,6 +19,10 @@ typedef struct App{
     Input input;
     Renderer renderer;
     UI ui;
+    float ground_y;
+    float eye_height;
+    float vertical_velocity;
+    bool on_ground;
     unsigned int last_ticks;
 } App;
 
