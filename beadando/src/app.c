@@ -11,6 +11,26 @@ static float seconds_from_ticks(unsigned int ticks){
     return (float)ticks / 1000.0f;
 }
 
+static void update_jump_physics(App *app, float dt){
+    const float gravity = 18.0f;
+    const float jump_speed = 7.0f;
+    const float floor_eye_y = app -> ground_y + app -> eye_height;
+
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_SPACE) && app -> on_ground){
+        app -> vertical_velocity = jump_speed;
+        app -> on_ground = false;
+    }
+
+    app -> vertical_velocity -= gravity * dt;
+    app -> camera.position.y += app -> vertical_velocity * dt;
+
+    if(app -> camera.position.y <= floor_eye_y){
+        app -> camera.position.y = floor_eye_y;
+        app -> vertical_velocity = 0.0f;
+        app -> on_ground = true;
+    }
+}
+
 static void handle_input_and_camera(App *app, float dt){
     Input *in = &app -> input;
 
@@ -30,6 +50,9 @@ static void handle_input_and_camera(App *app, float dt){
     }
     float step = speed * dt;
 
+    Vec3 forward_xz = vec3(app -> camera.front.x, 0.0f, app -> camera.front.z);
+    forward_xz = vec3_norm(forward_xz);
+
     if(input_key_down(in, SDL_SCANCODE_W)){
         camera_move(&app -> camera, app -> camera.front, step);
     }
@@ -42,12 +65,8 @@ static void handle_input_and_camera(App *app, float dt){
     if(input_key_down(in, SDL_SCANCODE_D)){
         camera_move(&app -> camera, app -> camera.right, step);
     }
-    if(input_key_down(in, SDL_SCANCODE_SPACE)){
-        camera_move(&app -> camera, vec3(0.0f, 1.0f, 0.0f), step);
-    }
-    if(input_key_down(in, SDL_SCANCODE_LCTRL) || input_key_down(in, SDL_SCANCODE_RCTRL)){
-        camera_move(&app -> camera, vec3(0.0f, 1.0f, 0.0f), -step);
-    }
+    
+    update_jump_physics(app, dt);
 }
 
 bool app_init(App *app, const char *title, int w, int h){
@@ -57,6 +76,11 @@ bool app_init(App *app, const char *title, int w, int h){
     app -> win_w = w;
     app -> win_h = h;
     app -> last_ticks = 0;
+
+    app -> ground_y = 0.0f;
+    app -> eye_height = 1.7f;
+    app -> vertical_velocity = 0.0f;
+    app -> on_ground = true;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -94,6 +118,7 @@ bool app_init(App *app, const char *title, int w, int h){
     SDL_SetRelativeMouseMode(SDL_TRUE);
 
     camera_init(&app -> camera);
+    app -> camera.position.y = app -> ground_y + app -> eye_height;
     ui_init(&app -> ui);
 
     for(int i = 0; i < SDL_NUM_SCANCODES; i++){
