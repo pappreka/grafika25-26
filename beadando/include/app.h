@@ -7,6 +7,7 @@
 #include "ui.h"
 #include "mesh.h"
 #include "texture.h"
+#include "solar.h"
 
 #include <stdbool.h>
 #include <SDL2/SDL.h>
@@ -26,8 +27,9 @@ typedef struct App{
     float vertical_velocity;
     bool on_ground;
     Mesh sphere_mesh;
-    Texture2D earth_tex;
-    float sphere_rot_deg;
+    SolarSystem solar;
+    bool visiting;
+    Vec3 visit_target_pos;
     unsigned int last_ticks;
 } App;
 

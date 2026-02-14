@@ -1,5 +1,6 @@
 #include "app.h"
 #include <stdio.h>
+#include <math.h>
 
 #if defined(_WIN32)
     #include <windows.h>
@@ -9,6 +10,14 @@
 
 static float seconds_from_ticks(unsigned int ticks){
     return (float)ticks / 1000.0f;
+}
+
+static float lerpf(float a, float b, float t){
+    return a + (b - a) * t;
+}
+
+static Vec3 vec3_lerp(Vec3 a, Vec3 b, float t){
+    return vec3(lerpf(a.x, b.x, t), lerpf(a.y, b.y, t), lerpf(a.z, b.z, t));
 }
 
 static void update_jump_physics(App *app, float dt){
@@ -31,44 +40,6 @@ static void update_jump_physics(App *app, float dt){
     }
 }
 
-static void handle_input_and_camera(App *app, float dt){
-    Input *in = &app -> input;
-
-    if(input_key_pressed(in, SDL_SCANCODE_ESCAPE)){
-        app -> running = false;
-    }
-
-    if(input_key_pressed(in, SDL_SCANCODE_F1)){
-        ui_toggle_help(&app -> ui);
-    }
-
-    camera_add_mouse(&app -> camera, in -> mouse_dx, in -> mouse_dy);
-
-    float speed = app -> camera.move_speed;
-    if(input_key_down(in, SDL_SCANCODE_LSHIFT) || input_key_down(in, SDL_SCANCODE_RSHIFT)){
-        speed *= 3.0f;
-    }
-    float step = speed * dt;
-
-    Vec3 forward_xz = vec3(app -> camera.front.x, 0.0f, app -> camera.front.z);
-    forward_xz = vec3_norm(forward_xz);
-
-    if(input_key_down(in, SDL_SCANCODE_W)){
-        camera_move(&app -> camera, app -> camera.front, step);
-    }
-    if(input_key_down(in, SDL_SCANCODE_S)){
-        camera_move(&app -> camera, app -> camera.front, -step);
-    }
-    if(input_key_down(in, SDL_SCANCODE_A)){
-        camera_move(&app -> camera, app -> camera.right, -step);
-    }
-    if(input_key_down(in, SDL_SCANCODE_D)){
-        camera_move(&app -> camera, app -> camera.right, step);
-    }
-    
-    update_jump_physics(app, dt);
-}
-
 static void draw_mesh_textured(const Mesh *m, unsigned int tex_id){
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, (GLuint)tex_id);
@@ -89,6 +60,120 @@ static void draw_mesh_textured(const Mesh *m, unsigned int tex_id){
     glDisable(GL_TEXTURE_2D);
 }
 
+static void start_visit(App *app, int planet_index){
+    Planet *p = solar_get(&app -> solar, planet_index);
+    if(!p){
+        return;
+    }
+
+    float dist = (p -> radius * 6.0f) + 2.5f;
+    Vec3 offset = vec3(0.0f, 0.0f, dist);
+
+    app -> visit_target_pos = vec3_add(p -> position, offset);
+    app -> visit_target_pos.y = app -> ground_y + app -> eye_height;
+
+    app -> visiting = true;
+    app -> vertical_velocity = 0.0f;
+    app -> on_ground = true;
+}
+
+static void update_camera_visit(App *app, float dt){
+    if(!app -> visiting){
+        return;
+    }
+
+    float k = 8.0f;
+    float t = 1.0f - expf(-k *dt);
+
+    app -> camera.position = vec3_lerp(app -> camera.position, app -> visit_target_pos, t);
+    Vec3 d = vec3_sub(app -> visit_target_pos, app -> camera.position);
+    if(vec3_len(d) < 0.03f){
+        app -> camera.position = app -> visit_target_pos;
+        app -> visiting = false;
+        app -> camera.position.y = app -> ground_y + app -> eye_height;
+        app -> vertical_velocity = 0.0f;
+        app -> on_ground = true;
+    }
+}
+
+static void handle_visit_keys(App *app){
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_1) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_1)){
+        start_visit(app, 0);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_2) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_2)){
+        start_visit(app, 1);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_3) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_3)){
+        start_visit(app, 2);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_4) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_4)){
+        start_visit(app, 3);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_5) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_5)){
+        start_visit(app, 4);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_6) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_6)){
+        start_visit(app, 5);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_7) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_7)){
+        start_visit(app, 6);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_8) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_8)){
+        start_visit(app, 7);
+    }
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_9) || input_key_pressed(&app -> input, SDL_SCANCODE_KP_9)){
+        start_visit(app, 8);
+    }
+}
+
+static void handle_input_and_camera(App *app, float dt){
+    Input *in = &app -> input;
+
+    if(input_key_pressed(in, SDL_SCANCODE_ESCAPE)){
+        app -> running = false;
+    }
+
+    if(input_key_pressed(in, SDL_SCANCODE_F1)){
+        ui_toggle_help(&app -> ui);
+    }
+
+    handle_visit_keys(app);
+
+    camera_add_mouse(&app -> camera, in -> mouse_dx, in -> mouse_dy);
+
+    if(app -> visiting){
+        update_camera_visit(app, dt);
+        return;
+    }
+
+    float speed = app -> camera.move_speed;
+    if(input_key_down(in, SDL_SCANCODE_LSHIFT) || input_key_down(in, SDL_SCANCODE_RSHIFT)){
+        speed *= 3.0f;
+    }
+    float step = speed * dt;
+
+    Vec3 forward_xz = vec3(app -> camera.front.x, 0.0f, app -> camera.front.z);
+    forward_xz = vec3_norm(forward_xz);
+
+    Vec3 right_xz = vec3(app -> camera.right.x, 0.0f, app -> camera.right.z);
+    right_xz = vec3_norm(right_xz);
+
+    if(input_key_down(in, SDL_SCANCODE_W)){
+        camera_move(&app -> camera, app -> camera.front, step);
+    }
+    if(input_key_down(in, SDL_SCANCODE_S)){
+        camera_move(&app -> camera, app -> camera.front, -step);
+    }
+    if(input_key_down(in, SDL_SCANCODE_A)){
+        camera_move(&app -> camera, app -> camera.right, -step);
+    }
+    if(input_key_down(in, SDL_SCANCODE_D)){
+        camera_move(&app -> camera, app -> camera.right, step);
+    }
+    
+    update_jump_physics(app, dt);
+}
+
 bool app_init(App *app, const char *title, int w, int h){
     app -> window = NULL;
     app -> gl_ctx = NULL;
@@ -104,10 +189,9 @@ bool app_init(App *app, const char *title, int w, int h){
 
     app -> sphere_mesh.verts = NULL;
     app -> sphere_mesh.vert_count = 0;
-    app -> earth_tex.id = 0;
-    app -> earth_tex.width = 0;
-    app -> earth_tex.height = 0;
-    app -> sphere_rot_deg = 0.0f;
+    
+    app -> visiting = false;
+    app -> visit_target_pos = vec3(0, 0, 0);
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -153,11 +237,6 @@ bool app_init(App *app, const char *title, int w, int h){
         app -> input.keys_pressed[i] = false;
     }
 
-    app -> input.mouse_dx = 0;
-    app -> input.mouse_dy = 0;
-    app -> input.mouse_wheel = 0;
-    app -> input.quit_requested = false;
-
     if(!renderer_init(&app -> renderer, w, h)){
         fprintf(stderr, "renderer_init failed\n");
         SDL_GL_DeleteContext(app -> gl_ctx);
@@ -177,8 +256,8 @@ bool app_init(App *app, const char *title, int w, int h){
         return false;
     }
 
-    if(!texture_load(&app -> earth_tex, "assets/textures/earth.jpg")){
-        fprintf(stderr, "Failde to load earth texture\n");
+    if(!solar_init(&app -> solar, &app -> sphere_mesh)){
+        fprintf(stderr, "solar_init failed\n");
         mesh_free(&app -> sphere_mesh);
         SDL_GL_DeleteContext(app -> gl_ctx);
         SDL_DestroyWindow(app -> window);
@@ -186,7 +265,7 @@ bool app_init(App *app, const char *title, int w, int h){
         return false;
     }
 
-    printf("Texture loaded: id=%u size=%dx%d\n", app -> earth_tex.id, app -> earth_tex.width, app -> earth_tex.height);
+    start_visit(app, 0);
 
     app -> running = true;
     app -> last_ticks = SDL_GetTicks();
@@ -194,7 +273,7 @@ bool app_init(App *app, const char *title, int w, int h){
 }
 
 void app_shutdown(App *app){
-    texture_free(&app -> earth_tex);
+    solar_shutdown(&app -> solar);
     mesh_free(&app -> sphere_mesh);
     if(app -> gl_ctx){
         SDL_GL_DeleteContext(app -> gl_ctx);
@@ -236,21 +315,22 @@ void app_run(App *app){
 
         handle_input_and_camera(app, dt);
 
-        app -> sphere_rot_deg += 25.0f * dt;
-        if(app -> sphere_rot_deg > 360.0f){
-            app -> sphere_rot_deg -= 360.0f;
-        }
+        solar_update(&app -> solar, dt);
         
         renderer_begin_frame(&app -> renderer);
         renderer_set_3d(&app -> renderer, &app -> camera);
         renderer_draw_world_axes_and_grid();
 
-        glPushMatrix();
-        glTranslatef(0.0f, 1.2f, 0.0f);
-        glScalef(1.2f, 1.2f, 1.2f);
-        glRotatef(app -> sphere_rot_deg, 0.0f, 1.0f, 0.0f);
-        draw_mesh_textured(&app -> sphere_mesh, app -> earth_tex.id);
-        glPopMatrix();
+        for(int i = 0; i < solar_count(&app -> solar); i++){
+            Planet *p = solar_get(&app -> solar, i);
+
+            glPushMatrix();
+            glTranslatef(p -> position.x, p -> position.y, p -> position.z);
+            glScalef(p -> radius, p -> radius, p -> radius);
+            glRotatef(p -> rotation_angle, 0.0f, 1.0f, 0.0f);
+            draw_mesh_textured(&app -> sphere_mesh, p -> texture.id);
+            glPopMatrix();
+        }
 
         ui_render_help_overlay(&app -> ui, app -> win_w, app -> win_h);
         renderer_end_frame(&app -> renderer);
