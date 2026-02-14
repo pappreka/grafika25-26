@@ -69,6 +69,26 @@ static void handle_input_and_camera(App *app, float dt){
     update_jump_physics(app, dt);
 }
 
+static void draw_mesh_textured(const Mesh *m, unsigned int tex_id){
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)tex_id);
+
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+    glBegin(GL_TRIANGLES);
+    for(int i = 0; i < m -> vert_count; i++){
+        const Vertex *v = &m -> verts[i];
+        glTexCoord2f(v -> u, v -> v);
+        glNormal3f(v -> nx, v -> ny, v -> nz);
+        glVertex3f(v -> px, v -> py, v -> pz);
+    }
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
+}
+
 bool app_init(App *app, const char *title, int w, int h){
     app -> window = NULL;
     app -> gl_ctx = NULL;
@@ -81,6 +101,13 @@ bool app_init(App *app, const char *title, int w, int h){
     app -> eye_height = 1.7f;
     app -> vertical_velocity = 0.0f;
     app -> on_ground = true;
+
+    app -> sphere_mesh.verts = NULL;
+    app -> sphere_mesh.vert_count = 0;
+    app -> earth_tex.id = 0;
+    app -> earth_tex.width = 0;
+    app -> earth_tex.height = 0;
+    app -> sphere_rot_deg = 0.0f;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -142,12 +169,33 @@ bool app_init(App *app, const char *title, int w, int h){
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    if(!mesh_load_obj(&app -> sphere_mesh, "assets/models/sphere.obj")){
+        fprintf(stderr, "Failed to load sphere.obj\n");
+        SDL_GL_DeleteContext(app -> gl_ctx);
+        SDL_DestroyWindow(app -> window);
+        SDL_Quit();
+        return false;
+    }
+
+    if(!texture_load(&app -> earth_tex, "assets/textures/earth.jpg")){
+        fprintf(stderr, "Failde to load earth texture\n");
+        mesh_free(&app -> sphere_mesh);
+        SDL_GL_DeleteContext(app -> gl_ctx);
+        SDL_DestroyWindow(app -> window);
+        SDL_Quit();
+        return false;
+    }
+
+    printf("Texture loaded: id=%u size=%dx%d\n", app -> earth_tex.id, app -> earth_tex.width, app -> earth_tex.height);
+
     app -> running = true;
     app -> last_ticks = SDL_GetTicks();
     return true;
 }
 
 void app_shutdown(App *app){
+    texture_free(&app -> earth_tex);
+    mesh_free(&app -> sphere_mesh);
     if(app -> gl_ctx){
         SDL_GL_DeleteContext(app -> gl_ctx);
     }
@@ -187,9 +235,23 @@ void app_run(App *app){
         }
 
         handle_input_and_camera(app, dt);
+
+        app -> sphere_rot_deg += 25.0f * dt;
+        if(app -> sphere_rot_deg > 360.0f){
+            app -> sphere_rot_deg -= 360.0f;
+        }
+        
         renderer_begin_frame(&app -> renderer);
         renderer_set_3d(&app -> renderer, &app -> camera);
         renderer_draw_world_axes_and_grid();
+
+        glPushMatrix();
+        glTranslatef(0.0f, 1.2f, 0.0f);
+        glScalef(1.2f, 1.2f, 1.2f);
+        glRotatef(app -> sphere_rot_deg, 0.0f, 1.0f, 0.0f);
+        draw_mesh_textured(&app -> sphere_mesh, app -> earth_tex.id);
+        glPopMatrix();
+
         ui_render_help_overlay(&app -> ui, app -> win_w, app -> win_h);
         renderer_end_frame(&app -> renderer);
         SDL_GL_SwapWindow(app -> window);
