@@ -304,9 +304,10 @@ void ui_render_help_overlay(const UI * ui, int screen_w, int screen_h){
         "Controls:\n"
         "  Mouse: look around\n"
         "  W/A/S/D: move\n"
-        "  Space/Ctrl: up/down\n"
+        "  Space/Ctrl: jump\n"
         "  Shift: faster\n"
         "  F1: toggle this help\n"
+        "  1..9: visit planets\n"
         "  Esc: quit\n"
         "\n"
         "Next milestones: OBJ + textures, planets, lights.";
