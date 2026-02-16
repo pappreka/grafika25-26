@@ -308,9 +308,11 @@ void ui_render_help_overlay(const UI * ui, int screen_w, int screen_h){
         "  Shift: faster\n"
         "  F1: toggle this help\n"
         "  1..9: visit planets\n"
-        "  Esc: quit\n"
-        "\n"
-        "Next milestones: OBJ + textures, planets, lights.";
+        "  L : toggle lighting\n"
+        "  up arrow / down arrow: light intensity\n"
+        "  F1: toggle this help\n"
+        "  Esc: quit\n";
+    
     draw_text(panel_x + 12, panel_y + 12, help, 2);
 
     ui_end_2d();

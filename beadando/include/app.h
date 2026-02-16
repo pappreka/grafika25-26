@@ -8,6 +8,7 @@
 #include "mesh.h"
 #include "texture.h"
 #include "solar.h"
+#include "math3d.h"
 
 #include <stdbool.h>
 #include <SDL2/SDL.h>
@@ -30,6 +31,8 @@ typedef struct App{
     SolarSystem solar;
     bool visiting;
     Vec3 visit_target_pos;
+    bool lighting_enabled;
+    float light_intensity;
     unsigned int last_ticks;
 } App;
 
