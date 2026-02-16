@@ -1,5 +1,4 @@
 #include "renderer.h"
-#include "math3d.h"
 
 #if defined(_WIN32)
     #include <windows.h>
@@ -8,11 +7,13 @@
 #include <GL/gl.h>
 #include <GL/glu.h>
 
+static bool g_lightning_enabled = true;
+
 static void set_perspective(int w, int h){
     float aspect = (h > 0) ? ((float)w / (float)h) : 1.0f;
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(70.0, (double)aspect, 0.05, 2000.0);
+    gluPerspective(70.0, (double)aspect, 0.1, 20000.0);
     glMatrixMode(GL_MODELVIEW);
 }
 
@@ -25,7 +26,23 @@ bool renderer_init(Renderer * r, int width, int height){
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glShadeModel(GL_SMOOTH);
-    glDisable(GL_LIGHTING);
+    glEnable(GL_NORMALIZE);
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    
+    {
+        GLfloat ga[4] = {0.18f, 0.18f, 0.18f, 1.0f};
+        glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ga);
+    }
+
+    {
+        GLfloat spec[4] = {0.25f, 0.25f, 0.25f, 1.0f};
+        GLfloat shin = 24.0f;
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, spec);
+        glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, shin);
+    }
 
     renderer_resize(r, width, height);
     return true;
@@ -45,7 +62,6 @@ void renderer_begin_frame(Renderer *r){
 }
 
 void renderer_set_3d(Renderer *r, const Camera *cam){
-    (void)r;
     set_perspective(r -> width, r -> height);
 
     Vec3 eye = cam -> position;
@@ -86,10 +102,50 @@ void renderer_draw_world_axes_and_grid(){
     glColor3f(0.2f, 0.2f, 0.9f);
     glVertex3f(0.0f, 0.0f, 0.0f);
     glVertex3f(0.0f, 0.0f, 3.0f);
-
     glEnd();
+
+    if(g_lightning_enabled){
+        glEnable(GL_LIGHTING);
+    }
 }
 
 void renderer_end_frame(Renderer *r){
     (void)r;
+}
+
+void renderer_set_lighting_enabled(bool enabled){
+    g_lightning_enabled = enabled;
+    if(enabled){
+        glEnable(GL_LIGHTING);
+    }
+    else{
+        glDisable(GL_LIGHTING);
+    }
+}
+
+void renderer_update_sun_light(Vec3 sun_pos, float intensity){
+    float i = intensity;
+    if(i < 0.0f){
+        i = 0.0f;
+    }
+
+    GLfloat ambient[4] = {0.20f * i, 0.20f * i, 0.20f * i, 1.0f};
+    GLfloat diffuse[4] = {0.90f * i, 0.90f * i, 0.90f * i, 1.0f};
+    GLfloat specular[4] = {0.35f * i, 0.35f * i, 0.35f * i, 1.0f};
+    GLfloat pos[4] = {sun_pos.x, sun_pos.y, sun_pos.z, 1.0f};
+
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glLightfv(GL_LIGHT0, GL_POSITION, pos);
+    glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
+
+    glPopMatrix();
+
+    glLightf(GL_LIGHT0, GL_CONSTANT_ATTENUATION, 1.0f);
+    glLightf(GL_LIGHT0, GL_LINEAR_ATTENUATION, 0.0f);
+    glLightf(GL_LIGHT0, GL_QUADRATIC_ATTENUATION, 0.0f);
 }

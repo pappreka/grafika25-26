@@ -20,6 +20,16 @@ static Vec3 vec3_lerp(Vec3 a, Vec3 b, float t){
     return vec3(lerpf(a.x, b.x, t), lerpf(a.y, b.y, t), lerpf(a.z, b.z, t));
 }
 
+static float clampf2(float v, float lo, float hi){
+    if(v < lo){
+        return lo;
+    }
+    if(v > hi){
+        return hi;
+    }
+    return v;
+}
+
 static void update_jump_physics(App *app, float dt){
     const float gravity = 18.0f;
     const float jump_speed = 7.0f;
@@ -40,7 +50,7 @@ static void update_jump_physics(App *app, float dt){
     }
 }
 
-static void draw_mesh_textured(const Mesh *m, unsigned int tex_id){
+static void draw_mesh_textured_lit(const Mesh *m, unsigned int tex_id){
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, (GLuint)tex_id);
 
@@ -126,6 +136,28 @@ static void handle_visit_keys(App *app){
     }
 }
 
+static void handle_lighting_keys(App *app){
+    if(input_key_pressed(&app -> input, SDL_SCANCODE_L)){
+        app -> lighting_enabled = !app -> lighting_enabled;
+        renderer_set_lighting_enabled(app -> lighting_enabled);
+    }
+
+    bool up = input_key_pressed(&app -> input, SDL_SCANCODE_UP) ||
+                input_key_pressed(&app -> input, SDL_SCANCODE_KP_8);
+
+    bool down = input_key_pressed(&app -> input, SDL_SCANCODE_DOWN) ||
+                input_key_pressed(&app -> input, SDL_SCANCODE_KP_2);
+    
+    if(up){
+        app -> light_intensity += 0.25f;
+    }
+    if(down){
+        app -> light_intensity -= 0.25f;
+    }
+
+    app -> light_intensity = clampf2(app -> light_intensity, 0.0f, 5.0f);
+}
+
 static void handle_input_and_camera(App *app, float dt){
     Input *in = &app -> input;
 
@@ -138,6 +170,7 @@ static void handle_input_and_camera(App *app, float dt){
     }
 
     handle_visit_keys(app);
+    handle_lighting_keys(app);
 
     camera_add_mouse(&app -> camera, in -> mouse_dx, in -> mouse_dy);
 
@@ -192,6 +225,9 @@ bool app_init(App *app, const char *title, int w, int h){
     
     app -> visiting = false;
     app -> visit_target_pos = vec3(0, 0, 0);
+
+    app -> lighting_enabled = true;
+    app -> light_intensity = 1.0f;
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -265,6 +301,8 @@ bool app_init(App *app, const char *title, int w, int h){
         return false;
     }
 
+    renderer_set_lighting_enabled(app -> lighting_enabled);
+
     start_visit(app, 0);
 
     app -> running = true;
@@ -316,6 +354,11 @@ void app_run(App *app){
         handle_input_and_camera(app, dt);
 
         solar_update(&app -> solar, dt);
+
+        Planet *sun = solar_get(&app -> solar, 0);
+        if(sun && app -> lighting_enabled){
+            renderer_update_sun_light(sun -> position, app -> light_intensity);
+        }
         
         renderer_begin_frame(&app -> renderer);
         renderer_set_3d(&app -> renderer, &app -> camera);
@@ -328,8 +371,18 @@ void app_run(App *app){
             glTranslatef(p -> position.x, p -> position.y, p -> position.z);
             glScalef(p -> radius, p -> radius, p -> radius);
             glRotatef(p -> rotation_angle, 0.0f, 1.0f, 0.0f);
-            draw_mesh_textured(&app -> sphere_mesh, p -> texture.id);
-            glPopMatrix();
+
+            if(i == 0){
+                glDisable(GL_LIGHTING);
+                draw_mesh_textured_lit(&app -> sphere_mesh, p -> texture.id);
+                if(app -> lighting_enabled){
+                    glEnable(GL_LIGHTING);
+                }
+                else{
+                    draw_mesh_textured_lit(&app -> sphere_mesh, p -> texture.id);
+                }
+                glPopMatrix();
+            }
         }
 
         ui_render_help_overlay(&app -> ui, app -> win_w, app -> win_h);
