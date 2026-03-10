@@ -17,6 +17,12 @@ typedef struct Planet{
     float rotation_angle;
     Vec3 position;
     Texture2D texture;
+
+    bool has_ring;
+    float ring_inner_radius;
+    float ring_outer_radius;
+    float ring_tilt_deg;
+    Texture2D ring_texture;
 } Planet;
 
 typedef struct SolarSystem{
