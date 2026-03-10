@@ -26,6 +26,8 @@ typedef struct Planet{
     float ring_outer_radius;
     float ring_tilt_deg;
     Texture2D ring_texture;
+
+    bool landable;
 } Planet;
 
 typedef struct SolarSystem{

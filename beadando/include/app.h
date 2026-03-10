@@ -22,6 +22,21 @@ typedef struct App{
     Camera camera;
     Vec3 fixed_camera_position;
 
+    bool landing_in_progress;
+    bool landed;
+    bool surface_mode;
+    float surface_speed;
+
+    int landed_planet_index;
+
+    Vec3 landed_camera_position;
+    Vec3 landing_start_position;
+    Vec3 landing_target_position;
+    Vec3 landing_surface_normal;
+
+    float landing_t;
+    float landing_duration;
+
     Input input;
     Renderer renderer;
     UI ui;

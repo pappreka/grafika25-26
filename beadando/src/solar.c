@@ -43,20 +43,17 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
     s->planet_count = 9;
     s->selected_forward_offset = 2.0f;
 
-    /* Navigációs sorrend:
-       Mars -> Earth -> Venus -> Mercury -> Sun -> Jupiter -> Saturn -> Uranus -> Neptune
-       Így a Napról balra lépve Jupiter jön először. */
-    s->selection_order[0] = 4; /* Mars */
-    s->selection_order[1] = 3; /* Earth */
-    s->selection_order[2] = 2; /* Venus */
-    s->selection_order[3] = 1; /* Mercury */
-    s->selection_order[4] = 0; /* Sun */
-    s->selection_order[5] = 5; /* Jupiter */
-    s->selection_order[6] = 6; /* Saturn */
-    s->selection_order[7] = 7; /* Uranus */
-    s->selection_order[8] = 8; /* Neptune */
+    /* Mars -> Earth -> Venus -> Mercury -> Sun -> Jupiter -> Saturn -> Uranus -> Neptune */
+    s->selection_order[0] = 4;
+    s->selection_order[1] = 3;
+    s->selection_order[2] = 2;
+    s->selection_order[3] = 1;
+    s->selection_order[4] = 0;
+    s->selection_order[5] = 5;
+    s->selection_order[6] = 6;
+    s->selection_order[7] = 7;
+    s->selection_order[8] = 8;
 
-    /* Kezdő kijelölés: Sun */
     s->selected_order_pos = 4;
 
     s->planets[0] = (Planet){
@@ -70,7 +67,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {0.0f, 1.2f, 0.0f},
         .position = {0.0f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/sun.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = false
     };
 
     s->planets[1] = (Planet){
@@ -84,7 +82,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {4.2f, 1.2f, 0.0f},
         .position = {4.2f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/mercury.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = true
     };
 
     s->planets[2] = (Planet){
@@ -98,7 +97,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {6.3f, 1.2f, 0.0f},
         .position = {6.3f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/venus.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = true
     };
 
     s->planets[3] = (Planet){
@@ -112,7 +112,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {8.8f, 1.2f, 0.0f},
         .position = {8.8f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/earth.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = true
     };
 
     s->planets[4] = (Planet){
@@ -126,7 +127,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {11.1f, 1.2f, 0.0f},
         .position = {11.1f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/mars.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = true
     };
 
     s->planets[5] = (Planet){
@@ -140,7 +142,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {-6.0f, 1.2f, 0.0f},
         .position = {-6.0f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/jupiter.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = false
     };
 
     s->planets[6] = (Planet){
@@ -158,7 +161,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .ring_inner_radius = 1.45f,
         .ring_outer_radius = 2.30f,
         .ring_tilt_deg = 26.0f,
-        .ring_texture = load_ring_or_fallback("assets/textures/saturn_ring.png")
+        .ring_texture = load_ring_or_fallback("assets/textures/saturn_ring.png"),
+        .landable = false
     };
 
     s->planets[7] = (Planet){
@@ -172,7 +176,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {-12.8f, 1.2f, 0.0f},
         .position = {-12.8f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/uranus.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = false
     };
 
     s->planets[8] = (Planet){
@@ -186,7 +191,8 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .base_position = {-15.7f, 1.2f, 0.0f},
         .position = {-15.7f, 1.2f, 0.0f},
         .texture = load_or_fallback("assets/textures/neptune.jpg"),
-        .has_ring = false
+        .has_ring = false,
+        .landable = false
     };
 
     apply_selection_positions(s);
