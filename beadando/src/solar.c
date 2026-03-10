@@ -11,6 +11,15 @@ static Texture2D load_or_fallback(const char *path){
     return t;
 }
 
+static Texture2D load_ring_or_fallback(const char *path){
+    Texture2D t;
+    if(!texture_load(&t, path)){
+        fprintf(stderr, "WARN: ring texture missing, using fallback: %s\n", path);
+        texture_create_solid(&t, 210, 190, 140, 180);
+    }
+    return t;
+}
+
 bool solar_init(SolarSystem *s, Mesh *shared_sphere){
     s -> shared_sphere = shared_sphere;
     s -> planet_count = 9;
@@ -24,7 +33,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_angle = 0.0f,
         .rotation_angle = 0.0f,
         .position = {0, 1.4f, 0},
-        .texture = load_or_fallback("assets/textures/sun.jpg")
+        .texture = load_or_fallback("assets/textures/sun.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     s -> planets[1] = (Planet){
@@ -34,7 +48,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 1.25f,
         .rotation_speed = 35.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/mercury.jpg")
+        .texture = load_or_fallback("assets/textures/mercury.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     s -> planets[2] = (Planet){
@@ -44,7 +63,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 0.95f,
         .rotation_speed = 25.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/venus.jpg")
+        .texture = load_or_fallback("assets/textures/venus.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     s -> planets[3] = (Planet){
@@ -54,7 +78,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 0.80f,
         .rotation_speed = 60.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/earth.jpg")
+        .texture = load_or_fallback("assets/textures/earth.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     s -> planets[4] = (Planet){
@@ -64,7 +93,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 0.70f,
         .rotation_speed = 55.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/mars.jpg")
+        .texture = load_or_fallback("assets/textures/mars.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     s -> planets[5] = (Planet){
@@ -74,7 +108,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 0.45f,
         .rotation_speed = 90.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/jupiter.jpg")
+        .texture = load_or_fallback("assets/textures/jupiter.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     s -> planets[6] = (Planet){
@@ -84,7 +123,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 0.35f,
         .rotation_speed = 80.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/saturn.jpg")
+        .texture = load_or_fallback("assets/textures/saturn.jpg"),
+        .has_ring = true,
+        .ring_inner_radius = 1.45f,
+        .ring_outer_radius = 2.30f,
+        .ring_tilt_deg = 26.0f,
+        .ring_texture = load_ring_or_fallback("assets/textures/saturn_ring.png")
     };
 
     s -> planets[7] = (Planet){
@@ -94,7 +138,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 0.28f,
         .rotation_speed = 70.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/uranus.jpg")
+        .texture = load_or_fallback("assets/textures/uranus.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     s -> planets[8] = (Planet){
@@ -104,7 +153,12 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .orbit_speed = 0.24f,
         .rotation_speed = 68.0f,
         .position = {0, 1.2f, 0},
-        .texture = load_or_fallback("assets/textures/neptune.jpg")
+        .texture = load_or_fallback("assets/textures/neptune.jpg"),
+        .has_ring = false,
+        .ring_inner_radius = 0.0f,
+        .ring_outer_radius = 0.0f,
+        .ring_tilt_deg = 0.0f,
+        .ring_texture = {0}
     };
 
     for(int i = 1; i < s -> planet_count; i++){
@@ -118,6 +172,9 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
 void solar_shutdown(SolarSystem *s){
     for(int i = 0; i < s -> planet_count; i++){
         texture_free(&s -> planets[i].texture);
+        if(s -> planets[i].has_ring){
+            texture_free(&s -> planets[i].ring_texture);
+        }
     }
 }
 
@@ -140,7 +197,7 @@ static void update_planet(Planet *p, const Planet *sun, float dt){
 void solar_update(SolarSystem *s, float dt){
     Planet *sun = &s -> planets[0];
 
-    sun -> rotation_angle += sun -> rotation_speed *dt;
+    sun -> rotation_angle += sun -> rotation_speed * dt;
     if(sun -> rotation_angle > 360.0f){
         sun -> rotation_angle -= 360.0f;
     }
