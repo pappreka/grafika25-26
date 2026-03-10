@@ -18,23 +18,18 @@ typedef struct App{
     bool running;
     int win_w;
     int win_h;
+
     Camera camera;
+    Vec3 fixed_camera_position;
+
     Input input;
     Renderer renderer;
     UI ui;
-    float ground_y;
-    float eye_height;
-    float vertical_velocity;
-    bool on_ground;
-
-    float camera_collision_radius;
 
     Mesh sphere_mesh;
     Texture2D stars_texture;
     SolarSystem solar;
 
-    bool visiting;
-    Vec3 visit_target_pos;
     unsigned int last_ticks;
 } App;
 
