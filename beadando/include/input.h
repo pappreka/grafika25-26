@@ -7,6 +7,8 @@
 typedef struct Input{
     bool keys[SDL_NUM_SCANCODES];
     bool keys_pressed[SDL_NUM_SCANCODES];
+    bool mouse_buttons[8];
+    bool mouse_buttons_pressed[8];
 
     int mouse_dx;
     int mouse_dy;
@@ -18,5 +20,7 @@ void input_begin_frame(Input *in);
 void input_process_event(Input *in, const SDL_Event *e);
 bool input_key_down(const Input *in, SDL_Scancode sc);
 bool input_key_pressed(const Input *in, SDL_Scancode sc);
+bool input_mouse_down(const Input *in, int button);
+bool input_mouse_pressed(const Input *in, int button);
 
 #endif

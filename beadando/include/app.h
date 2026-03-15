@@ -8,6 +8,7 @@
 #include "mesh.h"
 #include "texture.h"
 #include "solar.h"
+#include "planet_scene.h"
 
 #include <stdbool.h>
 #include <SDL2/SDL.h>
@@ -23,13 +24,11 @@ typedef struct App{
     Vec3 fixed_camera_position;
 
     bool landing_in_progress;
-    bool landed;
     bool surface_mode;
     float surface_speed;
 
     int landed_planet_index;
 
-    Vec3 landed_camera_position;
     Vec3 landing_start_position;
     Vec3 landing_target_position;
     Vec3 landing_surface_normal;
@@ -44,6 +43,7 @@ typedef struct App{
     Mesh sphere_mesh;
     Texture2D stars_texture;
     SolarSystem solar;
+    PlanetScene planet_scene;
 
     unsigned int last_ticks;
 } App;
