@@ -3,7 +3,7 @@
 #include <math.h>
 
 #if defined(_WIN32)
-#include <windows.h>
+    #include <windows.h>
 #endif
 
 #include <GL/gl.h>
@@ -47,19 +47,20 @@ static void setup_fixed_camera(App *app){
     app->camera.position = app->fixed_camera_position;
     app->camera.yaw_deg = -90.0f;
     app->camera.pitch_deg = 0.0f;
+    app->camera.mouse_sens = 0.12f;
 
     camera_update_vectors(&app->camera);
 }
 
 static void reset_to_overview(App *app){
     app->landing_in_progress = false;
-    app->landed = false;
     app->surface_mode = false;
+    app->landed_planet_index = -1;
+    app->planet_scene.active = false;
 
     app->camera.position = app->fixed_camera_position;
     app->camera.yaw_deg = -90.0f;
     app->camera.pitch_deg = 0.0f;
-
     camera_update_vectors(&app->camera);
 }
 
@@ -212,7 +213,6 @@ static void start_landing(App *app){
     app->landing_t = 0.0f;
     app->landing_duration = 1.35f;
     app->landing_in_progress = true;
-    app->landed = false;
     app->surface_mode = false;
     app->landed_planet_index = selected;
 }
@@ -249,57 +249,43 @@ static void update_landing(App *app, float dt){
     set_camera_look_at(&app->camera, p->position);
 
     if(app->landing_t >= 1.0f){
+        planet_scene_build(&app->planet_scene, p, app->landed_planet_index);
+
+        app->camera.position = app->planet_scene.spawn_position;
+        app->camera.yaw_deg = app->planet_scene.spawn_yaw_deg;
+        app->camera.pitch_deg = app->planet_scene.spawn_pitch_deg;
+        camera_update_vectors(&app->camera);
+
         app->landing_in_progress = false;
-        app->landed = true;
         app->surface_mode = true;
-        app->landed_camera_position = app->landing_target_position;
     }
 }
 
-static void update_surface_movement(App *app, float dt){
-    Planet *p = solar_get(&app->solar, app->landed_planet_index);
-    Vec3 move = vec3(0.0f, 0.0f, 0.0f);
+static void handle_surface_interaction(App *app){
+    const char *msg = NULL;
 
-    if(!p){
-        return;
-    }
-
-    if(input_key_down(&app->input, SDL_SCANCODE_W)){
-        move = vec3_add(move, app->camera.front);
-    }
-    if(input_key_down(&app->input, SDL_SCANCODE_S)){
-        move = vec3_sub(move, app->camera.front);
-    }
-    if(input_key_down(&app->input, SDL_SCANCODE_A)){
-        move = vec3_sub(move, app->camera.right);
-    }
-    if(input_key_down(&app->input, SDL_SCANCODE_D)){
-        move = vec3_add(move, app->camera.right);
-    }
-
-    if(vec3_len(move) > 0.001f){
-        move = vec3_norm(move);
-        move = vec3_scale(move, app->surface_speed * dt);
-        app->landed_camera_position = vec3_add(app->landed_camera_position, move);
-    }
-
-    {
-        Vec3 dir = vec3_sub(app->landed_camera_position, p->position);
-        float height = p->radius + 0.3f;
-
-        dir = vec3_norm(dir);
-
-        if(vec3_len(dir) < 0.0001f){
-            dir = vec3(0.0f, 0.0f, 1.0f);
+    if(input_key_pressed(&app->input, SDL_SCANCODE_E)){
+        msg = planet_scene_interact(&app->planet_scene, app->camera.position);
+        if(msg){
+            ui_set_status(&app->ui, msg, 3.0f);
+        }else{
+            ui_set_status(&app->ui, "Nincs kozelben interaktiv objektum.", 2.0f);
         }
-
-        app->landed_camera_position = vec3_add(
-            p->position,
-            vec3_scale(dir, height)
-        );
     }
 
-    app->camera.position = app->landed_camera_position;
+    if(input_mouse_pressed(&app->input, SDL_BUTTON_LEFT)){
+        msg = planet_scene_handle_click(&app->planet_scene, app->camera.position, app->camera.front);
+        if(!msg && app->landed_planet_index == 3){
+            msg = planet_scene_throw_stone(&app->planet_scene, app->camera.position, app->camera.front);
+        }
+        if(msg){
+            ui_set_status(&app->ui, msg, 2.5f);
+        }
+    }
+
+    if(planet_scene_should_exit(&app->planet_scene)){
+        reset_to_overview(app);
+    }
 }
 
 static void handle_input_and_camera(App *app, float dt){
@@ -333,7 +319,8 @@ static void handle_input_and_camera(App *app, float dt){
         }
 
         camera_update_vectors(&app->camera);
-        update_surface_movement(app, dt);
+        planet_scene_update(&app->planet_scene, &app->camera, &app->input, dt);
+        handle_surface_interaction(app);
         return;
     }
 
@@ -372,16 +359,12 @@ bool app_init(App *app, const char *title, int w, int h){
     app->last_ticks = 0;
 
     app->landing_in_progress = false;
-    app->landed = false;
     app->surface_mode = false;
     app->surface_speed = 4.0f;
     app->landed_planet_index = -1;
-    app->landed_camera_position = vec3(0.0f, 0.0f, 0.0f);
     app->landing_start_position = vec3(0.0f, 0.0f, 0.0f);
     app->landing_target_position = vec3(0.0f, 0.0f, 0.0f);
     app->landing_surface_normal = vec3(0.0f, 1.0f, 0.0f);
-    app->landing_t = 0.0f;
-    app->landing_duration = 1.35f;
 
     app->sphere_mesh.verts = NULL;
     app->sphere_mesh.vert_count = 0;
@@ -389,6 +372,8 @@ bool app_init(App *app, const char *title, int w, int h){
     app->stars_texture.id = 0;
     app->stars_texture.width = 0;
     app->stars_texture.height = 0;
+
+    planet_scene_init(&app->planet_scene);
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -431,6 +416,10 @@ bool app_init(App *app, const char *title, int w, int h){
     for(int i = 0; i < SDL_NUM_SCANCODES; i++){
         app->input.keys[i] = false;
         app->input.keys_pressed[i] = false;
+    }
+    for(int i = 0; i < (int)(sizeof(app->input.mouse_buttons) / sizeof(app->input.mouse_buttons[0])); ++i){
+        app->input.mouse_buttons[i] = false;
+        app->input.mouse_buttons_pressed[i] = false;
     }
 
     if(!renderer_init(&app->renderer, w, h)){
@@ -527,28 +516,31 @@ void app_run(App *app){
 
         draw_sky_sphere(app);
 
-        for(int i = 0; i < solar_count(&app->solar); i++){
-            Planet *p = solar_get(&app->solar, i);
+        if(app->surface_mode){
+            planet_scene_render(&app->planet_scene);
+        }else{
+            for(int i = 0; i < solar_count(&app->solar); i++){
+                Planet *p = solar_get(&app->solar, i);
 
-            if(p->has_ring){
-                draw_planet_ring(p);
+                if(p->has_ring){
+                    draw_planet_ring(p);
+                }
+
+                glPushMatrix();
+                glTranslatef(p->position.x, p->position.y, p->position.z);
+                glScalef(p->radius, p->radius, p->radius);
+                glRotatef(p->rotation_angle, 0.0f, 1.0f, 0.0f);
+
+                if(i == solar_selected_index(&app->solar) &&
+                   !app->landing_in_progress){
+                    glColor4f(1.15f, 1.15f, 1.15f, 1.0f);
+                }else{
+                    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                }
+
+                draw_mesh_textured(&app->sphere_mesh, p->texture.id);
+                glPopMatrix();
             }
-
-            glPushMatrix();
-            glTranslatef(p->position.x, p->position.y, p->position.z);
-            glScalef(p->radius, p->radius, p->radius);
-            glRotatef(p->rotation_angle, 0.0f, 1.0f, 0.0f);
-
-            if(i == solar_selected_index(&app->solar) &&
-               !app->landing_in_progress &&
-               !app->surface_mode){
-                glColor4f(1.15f, 1.15f, 1.15f, 1.0f);
-            }else{
-                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-            }
-
-            draw_mesh_textured(&app->sphere_mesh, p->texture.id);
-            glPopMatrix();
         }
 
         ui_render_help_overlay(&app->ui, app->win_w, app->win_h);

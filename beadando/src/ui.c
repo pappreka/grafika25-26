@@ -159,6 +159,8 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
             "  Left / Right: select planet\n"
             "  Enter: land on selected planet\n"
             "  W/A/S/D: move on surface after landing\n"
+            "  E: interact with nearby object\n"
+            "  Left click: ship / throw stone on Earth\n"
             "  Backspace: return to overview\n"
             "  F1: toggle help\n"
             "  Esc: quit\n"
