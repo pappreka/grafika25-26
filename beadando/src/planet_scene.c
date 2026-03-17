@@ -15,6 +15,9 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#define COLLISION_SCALE_XZ 0.4f
+#define COLLISION_SCALE_Y  0.6f
+
 typedef struct SurfaceAsset{
     Mesh mesh;
     Texture2D texture;
@@ -207,6 +210,43 @@ static void draw_box(Vec3 center, Vec3 half)
     glEnd();
 }
 
+static void draw_bbox_wire(Vec3 center, Vec3 half, float r, float g, float b)
+{
+    float x0 = center.x - half.x;
+    float x1 = center.x + half.x;
+    float y0 = center.y - half.y;
+    float y1 = center.y + half.y;
+    float z0 = center.z - half.z;
+    float z1 = center.z + half.z;
+
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
+    glLineWidth(3.0f);
+    glColor3f(r, g, b);
+
+    glBegin(GL_LINES);
+
+    glVertex3f(x0,y0,z0); glVertex3f(x1,y0,z0);
+    glVertex3f(x1,y0,z0); glVertex3f(x1,y0,z1);
+    glVertex3f(x1,y0,z1); glVertex3f(x0,y0,z1);
+    glVertex3f(x0,y0,z1); glVertex3f(x0,y0,z0);
+
+    glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0);
+    glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1);
+    glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
+    glVertex3f(x0,y1,z1); glVertex3f(x0,y1,z0);
+
+    glVertex3f(x0,y0,z0); glVertex3f(x0,y1,z0);
+    glVertex3f(x1,y0,z0); glVertex3f(x1,y1,z0);
+    glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1);
+    glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1);
+
+    glEnd();
+
+    glLineWidth(1.0f);
+    glEnable(GL_DEPTH_TEST);
+}
+
 static void draw_river(const PlanetScene *scene)
 {
     int i;
@@ -277,6 +317,81 @@ static void draw_terrain(const PlanetScene *scene)
     }
 }
 
+static void get_ship_bbox(const SurfaceObject *o, Vec3 *center, Vec3 *half)
+{
+    float bottom;
+    float top;
+
+    half->x = o->half_extents.x * 0.22f;
+    half->z = o->half_extents.z * 0.22f;
+
+    bottom = o->half_extents.y * 0.95f;
+    top    = o->half_extents.y * 0.35f;
+
+    half->y = (top + bottom) * 0.5f;
+
+    center->x = o->position.x;
+    center->z = o->position.z;
+    center->y = o->position.y - (bottom - half->y);
+}
+
+static Vec3 object_bbox_half(const SurfaceObject *o)
+{
+    switch(o->type){
+        case SURFACE_OBJECT_RIVER_ROCK:
+            return vec3(
+                o->half_extents.x * 0.16f,
+                o->half_extents.y * 0.10f,
+                o->half_extents.z * 0.16f
+            );
+
+        case SURFACE_OBJECT_ROCK:
+            return vec3(
+                o->half_extents.x * 2.5f,
+                o->half_extents.y * 2.0f,
+                o->half_extents.z * 2.5f
+            );
+
+        case SURFACE_OBJECT_SHIP:
+            return vec3(
+                o->half_extents.x * 0.22f,
+                o->half_extents.y * 0.33f,
+                o->half_extents.z * 0.22f
+            );
+
+        default:
+            return vec3(
+                o->half_extents.x * COLLISION_SCALE_XZ,
+                o->half_extents.y * COLLISION_SCALE_Y,
+                o->half_extents.z * COLLISION_SCALE_XZ
+            );
+    }
+}
+
+static Vec3 object_bbox_center(const SurfaceObject *o)
+{
+    Vec3 c = o->position;
+
+    switch(o->type){
+        case SURFACE_OBJECT_RIVER_ROCK:
+            c.y -= o->half_extents.y * 0.95f;
+            break;
+
+        case SURFACE_OBJECT_ROCK:
+            c.y += 0.90f;
+            break;
+
+        case SURFACE_OBJECT_SHIP:
+            c.y -= o->half_extents.y * 0.60f;
+            break;
+
+        default:
+            break;
+    }
+
+    return c;
+}
+
 static void draw_objects(const PlanetScene *scene)
 {
     int i;
@@ -285,6 +400,15 @@ static void draw_objects(const PlanetScene *scene)
 
     for(i = 0; i < scene->object_count; ++i){
         const SurfaceObject *o = &scene->objects[i];
+        Vec3 bbox_center;
+        Vec3 bbox_half;
+
+        if(o->type == SURFACE_OBJECT_SHIP){
+            get_ship_bbox(o, &bbox_center, &bbox_half);
+        }else{
+            bbox_center = object_bbox_center(o);
+            bbox_half = object_bbox_half(o);
+        }
 
         switch(o->type){
             case SURFACE_OBJECT_SHIP:
@@ -314,6 +438,14 @@ static void draw_objects(const PlanetScene *scene)
                 draw_box(o->position, o->half_extents);
                 break;
         }
+
+        if(o->interactive){
+            draw_bbox_wire(bbox_center, bbox_half, 1.0f, 1.0f, 0.0f);
+        }else if(o->blocks_movement){
+            draw_bbox_wire(bbox_center, bbox_half, 1.0f, 0.0f, 0.0f);
+        }else{
+            draw_bbox_wire(bbox_center, bbox_half, 0.0f, 1.0f, 1.0f);
+        }
     }
 }
 
@@ -334,6 +466,8 @@ static void draw_thrown_stones(const PlanetScene *scene)
         }else{
             draw_box(s->position, vec3(0.12f, 0.12f, 0.12f));
         }
+
+        draw_bbox_wire(s->position, vec3(0.08f, 0.06f, 0.08f), 0.0f, 1.0f, 0.0f);
     }
 }
 
@@ -421,15 +555,24 @@ static int find_interactive_index(const PlanetScene *scene, Vec3 pos, Vec3 forwa
 static bool collides_with_object(const SurfaceObject *o, Vec3 pos, float radius)
 {
     float dx, dz;
+    Vec3 c, h;
 
     if(!o->blocks_movement){
         return false;
     }
 
-    dx = fabsf(pos.x - o->position.x);
-    dz = fabsf(pos.z - o->position.z);
+    if(o->type == SURFACE_OBJECT_SHIP){
+        get_ship_bbox(o, &c, &h);
+    }else{
+        c = object_bbox_center(o);
+        h = object_bbox_half(o);
+    }
 
-    return dx < (o->half_extents.x + radius) && dz < (o->half_extents.z + radius);
+    dx = fabsf(pos.x - c.x);
+    dz = fabsf(pos.z - c.z);
+
+    return dx < (h.x + radius) &&
+           dz < (h.z + radius);
 }
 
 static ThrownStone *alloc_stone(PlanetScene *scene)
@@ -483,7 +626,6 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
     scene->river_z_min = -26.0f;
     scene->river_z_max = 26.0f;
 
-    /* távolabb visszük a spawn pontot, hogy ne az óriási űrhajó ütközési terében indulj */
     scene->spawn_position = vec3(-28.0f,
                                  terrain_height(scene, -28.0f, 22.0f) + scene->eye_height,
                                  22.0f);
@@ -500,18 +642,6 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
         last_object(scene)->yaw_deg = 145.0f;
         last_object(scene)->model_scale = 0.400f;
     }
-
-    add_object(scene, SURFACE_OBJECT_CRATE,
-               -4.2f, 8.8f,
-               0.9f, 0.7f, 0.9f,
-               true, true,
-               "Lada: itt vannak a dobhato kovek.");
-
-    add_object(scene, SURFACE_OBJECT_LOG,
-               1.8f, 9.6f,
-               1.5f, 0.25f, 0.25f,
-               false, true,
-               NULL);
 
     add_object(scene, SURFACE_OBJECT_ROCK,
                -2.0f, 14.0f,
