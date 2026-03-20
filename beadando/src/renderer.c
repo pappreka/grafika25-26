@@ -28,7 +28,6 @@ bool renderer_init(Renderer *r, int width, int height) {
 
     glShadeModel(GL_SMOOTH);
 
-    // No lighting in restored working version
     glDisable(GL_LIGHTING);
 
     renderer_resize(r, width, height);
@@ -42,9 +41,15 @@ void renderer_resize(Renderer *r, int width, int height) {
     set_perspective(width, height);
 }
 
-void renderer_begin_frame(Renderer *r) {
+void renderer_begin_frame(Renderer *r, bool surface_mode) {
     (void)r;
-    glClearColor(0.03f, 0.03f, 0.05f, 1.0f);
+
+    if (surface_mode) {
+        glClearColor(0.53f, 0.81f, 0.98f, 1.0f);
+    } else {
+        glClearColor(0.03f, 0.03f, 0.05f, 1.0f);
+    }
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
