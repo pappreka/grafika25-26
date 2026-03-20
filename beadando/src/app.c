@@ -85,6 +85,10 @@ static void draw_mesh_textured(const Mesh *m, unsigned int tex_id){
 }
 
 static void draw_sky_sphere(const App *app){
+    if(app->surface_mode){
+        return;
+    }
+
     if(app->stars_texture.id == 0){
         return;
     }
@@ -185,7 +189,7 @@ static void start_landing(App *app){
     }
 
     if(!p->landable){
-        ui_set_status(&app->ui, "Erre a bolygora nem lehet leszallni.", 3.0f);
+        ui_set_status(&app->ui, "You cannot land on this planet", 3.0f);
         return;
     }
 
@@ -511,7 +515,7 @@ void app_run(App *app){
         handle_input_and_camera(app, dt);
         solar_update(&app->solar, dt);
 
-        renderer_begin_frame(&app->renderer);
+        renderer_begin_frame(&app->renderer, app -> surface_mode);
         renderer_set_3d(&app->renderer, &app->camera);
 
         draw_sky_sphere(app);
