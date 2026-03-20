@@ -32,6 +32,7 @@ typedef struct SurfaceAssets{
     SurfaceAsset river_rock;
     SurfaceAsset wild_rock;
     SurfaceAsset throw_rock;
+    SurfaceAsset tree;
 } SurfaceAssets;
 
 static SurfaceAssets g_assets;
@@ -83,6 +84,11 @@ static void ensure_assets_loaded(void)
                    "assets/models/river-rock-throw.obj",
                    "river-rock-throw.obj",
                    "assets/textures/river_rock.png");
+
+    asset_try_load(&g_assets.tree,
+                   "assets/models/tree.obj",
+                   "tree.obj",
+                   "assets/textures/tree.png");
 }
 
 static void compile_asset_list(SurfaceAsset *asset)
@@ -352,6 +358,13 @@ static Vec3 object_bbox_half(const SurfaceObject *o)
                 o->half_extents.z * 2.5f
             );
 
+        case SURFACE_OBJECT_TREE:
+            return vec3(
+                o->half_extents.x * 0.45f,
+                o->half_extents.y * 0.90f,
+                o->half_extents.z * 0.45f
+            );
+
         case SURFACE_OBJECT_SHIP:
             return vec3(
                 o->half_extents.x * 0.22f,
@@ -379,6 +392,10 @@ static Vec3 object_bbox_center(const SurfaceObject *o)
 
         case SURFACE_OBJECT_ROCK:
             c.y += 0.90f;
+            break;
+
+        case SURFACE_OBJECT_TREE:
+            c.y += o->half_extents.y * 0.25f;
             break;
 
         case SURFACE_OBJECT_SHIP:
@@ -427,6 +444,13 @@ static void draw_objects(const PlanetScene *scene)
 
             case SURFACE_OBJECT_ROCK:
                 draw_asset(&g_assets.wild_rock,
+                           vec3(o->position.x, o->position.y - o->half_extents.y, o->position.z),
+                           o->yaw_deg,
+                           o->model_scale);
+                break;
+
+            case SURFACE_OBJECT_TREE:
+                draw_asset(&g_assets.tree,
                            vec3(o->position.x, o->position.y - o->half_extents.y, o->position.z),
                            o->yaw_deg,
                            o->model_scale);
@@ -692,6 +716,46 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
         last_object(scene)->yaw_deg = 310.0f;
         last_object(scene)->model_scale = 0.190f;
     }
+
+    add_object(scene, SURFACE_OBJECT_TREE,
+               -18.0f, 4.0f,
+               2.0f, 5.0f, 2.0f,
+               false, true,
+               NULL);
+    if(last_object(scene)){
+        last_object(scene)->yaw_deg = 15.0f;
+        last_object(scene)->model_scale = 0.25f;
+    }
+
+    add_object(scene, SURFACE_OBJECT_TREE,
+               -22.0f, -6.0f,
+               2.2f, 5.5f, 2.2f,
+               false, true,
+               NULL);
+    if(last_object(scene)){
+        last_object(scene)->yaw_deg = 80.0f;
+        last_object(scene)->model_scale = 0.25f;
+    }
+
+    add_object(scene, SURFACE_OBJECT_TREE,
+               14.0f, 8.0f,
+               2.0f, 5.0f, 2.0f,
+               false, true,
+               NULL);
+    if(last_object(scene)){
+        last_object(scene)->yaw_deg = 140.0f;
+        last_object(scene)->model_scale = 0.25f;
+    }
+
+    add_object(scene, SURFACE_OBJECT_TREE,
+               18.0f, -10.0f,
+               2.4f, 5.8f, 2.4f,
+               false, true,
+               NULL);
+    if(last_object(scene)){
+        last_object(scene)->yaw_deg = 210.0f;
+        last_object(scene)->model_scale = 0.25f;
+    }
 }
 
 void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input, float dt)
@@ -833,7 +897,8 @@ const char *planet_scene_interact(PlanetScene *scene, Vec3 camera_position)
     if(scene->objects[idx].type == SURFACE_OBJECT_SHIP){
         scene->objects[idx].state = 0.05f;
         scene->exit_requested = true;
-        snprintf(scene->interaction_message, sizeof(scene->interaction_message),
+        snprintf(scene->interaction_message,
+                 sizeof(scene->interaction_message),
                  "Az urhajo ajtaja kinyilt. Visszatersz az attekinto nezetbe.");
         return scene->interaction_message;
     }
@@ -843,12 +908,17 @@ const char *planet_scene_interact(PlanetScene *scene, Vec3 camera_position)
         if(scene->stones_available > 12){
             scene->stones_available = 12;
         }
-        snprintf(scene->interaction_message, sizeof(scene->interaction_message),
-                 "Felvettel nehany kavicsot. Dobhato kovek: %d", scene->stones_available);
+        snprintf(scene->interaction_message,
+                 sizeof(scene->interaction_message),
+                 "Felvettel nehany kavicsot. Dobhato kovek: %d",
+                 scene->stones_available);
         return scene->interaction_message;
     }
 
-    return NULL;
+    snprintf(scene->interaction_message,
+             sizeof(scene->interaction_message),
+             "Nincs kulon interakcio ehhez az objektumhoz.");
+    return scene->interaction_message;
 }
 
 const char *planet_scene_handle_click(PlanetScene *scene, Vec3 camera_position, Vec3 camera_forward)
@@ -867,8 +937,11 @@ const char *planet_scene_handle_click(PlanetScene *scene, Vec3 camera_position, 
     if(scene->objects[idx].type == SURFACE_OBJECT_SHIP){
         scene->objects[idx].state = 0.05f;
         scene->exit_requested = true;
-        snprintf(scene->interaction_message, sizeof(scene->interaction_message),
+
+        snprintf(scene->interaction_message,
+                 sizeof(scene->interaction_message),
                  "Az urhajora kattintottal, az ajto kinyilt.");
+
         return scene->interaction_message;
     }
 
@@ -885,14 +958,16 @@ const char *planet_scene_throw_stone(PlanetScene *scene, Vec3 camera_position, V
     }
 
     if(scene->stones_available <= 0){
-        snprintf(scene->interaction_message, sizeof(scene->interaction_message),
-                 "Nincs nalad kavics. Nezz korul a lada kozeleben.");
+        snprintf(scene->interaction_message,
+                 sizeof(scene->interaction_message),
+                 "Nincs nalad kavics.");
         return scene->interaction_message;
     }
 
     s = alloc_stone(scene);
     if(!s){
-        snprintf(scene->interaction_message, sizeof(scene->interaction_message),
+        snprintf(scene->interaction_message,
+                 sizeof(scene->interaction_message),
                  "Most tul sok ko van a levegoben.");
         return scene->interaction_message;
     }
@@ -910,43 +985,15 @@ const char *planet_scene_throw_stone(PlanetScene *scene, Vec3 camera_position, V
 
     scene->stones_available--;
 
-    snprintf(scene->interaction_message, sizeof(scene->interaction_message),
-             "Kavics eldobva. Maradt: %d", scene->stones_available);
+    snprintf(scene->interaction_message,
+             sizeof(scene->interaction_message),
+             "Kavics eldobva. Maradt: %d",
+             scene->stones_available);
+
     return scene->interaction_message;
 }
 
 bool planet_scene_should_exit(const PlanetScene *scene)
 {
     return scene->exit_requested;
-}
-
-const char *planet_scene_get_prompt(const PlanetScene *scene, Vec3 camera_position, Vec3 camera_forward)
-{
-    static char prompt[160];
-    int idx;
-
-    if(!scene->active){
-        return NULL;
-    }
-
-    idx = find_interactive_index(scene, camera_position, camera_forward, 3.0f);
-    if(idx < 0){
-        if(scene->stones_available > 0){
-            snprintf(prompt, sizeof(prompt), "Bal klikk: kavicsdobas a folyoba (%d)", scene->stones_available);
-            return prompt;
-        }
-        return NULL;
-    }
-
-    switch(scene->objects[idx].type){
-        case SURFACE_OBJECT_SHIP:
-            snprintf(prompt, sizeof(prompt), "E vagy bal klikk: urhajo ajto nyitasa es visszateres");
-            return prompt;
-        case SURFACE_OBJECT_CRATE:
-            snprintf(prompt, sizeof(prompt), "E: kovek felvetele a ladabol (%d)", scene->stones_available);
-            return prompt;
-        default:
-            snprintf(prompt, sizeof(prompt), "E: interakcio");
-            return prompt;
-    }
 }
