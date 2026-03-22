@@ -37,6 +37,7 @@ typedef struct SurfaceAssets{
 
 static SurfaceAssets g_assets;
 static float g_light_intensity = 1.0f;
+static float g_river_time = 0.0f;
 
 static float mountain_ring_inner_radius(const PlanetScene *scene)
 {
@@ -176,6 +177,37 @@ static void draw_asset(const SurfaceAsset *asset,
     glDisable(GL_TEXTURE_2D);
 }
 
+static float ripple_height_offset(const PlanetScene *scene, float x, float z)
+{
+    int i;
+    float sum = 0.0f;
+
+    for(i = 0; i < (int)(sizeof(scene->ripples) / sizeof(scene->ripples[0])); ++i){
+        const WaterRipple *r = &scene->ripples[i];
+        if(!r->active){
+            continue;
+        }
+
+        {
+            float dx = x - r->position.x;
+            float dz = z - r->position.z;
+            float dist = sqrtf(dx * dx + dz * dz);
+            float front = r->radius + r->age * r->speed;
+            float band = 0.9f;
+            float d = fabsf(dist - front);
+
+            if(d < band){
+                float fade = 1.0f - (r->age / r->life);
+                float ring = 1.0f - (d / band);
+                float wave = sinf((1.0f - d / band) * (float)M_PI);
+                sum += r->amplitude * fade * ring * wave;
+            }
+        }
+    }
+
+    return sum;
+}
+
 static float river_center_x(const PlanetScene *scene, float z)
 {
     (void)scene;
@@ -186,22 +218,31 @@ static float river_surface_height(const PlanetScene *scene, float x, float z)
 {
     (void)scene;
 
-    /* magasabb, stabil alap vízszint */
-    float base_level = -0.45f;
+    float base_level = -0.42f;
+    float slope = -0.10f * (z / 45.0f);
 
-    /* enyhe lejtés */
-    float slope = -0.12f * (z / 45.0f);
+    float wave_long_1 = 0.050f * sinf(z * 0.22f + x * 0.05f + g_river_time * 0.90f);
+    float wave_long_2 = 0.035f * cosf(z * 0.18f - x * 0.07f - g_river_time * 0.70f);
 
-    /* finom hullámzás */
-    float wave1 = 0.020f * sinf(z * 0.45f + x * 0.12f);
-    float wave2 = 0.010f * cosf(z * 1.10f - x * 0.08f);
+    float wave_mid_1  = 0.020f * sinf(z * 0.85f + x * 0.18f + g_river_time * 1.80f);
+    float wave_mid_2  = 0.014f * cosf(z * 1.10f - x * 0.14f - g_river_time * 1.40f);
 
-    return base_level + slope + wave1 + wave2;
+    float wave_small_1 = 0.008f * sinf(z * 2.40f + x * 0.35f + g_river_time * 3.20f);
+    float wave_small_2 = 0.006f * cosf(z * 2.90f - x * 0.28f - g_river_time * 2.70f);
+
+    float ripple = ripple_height_offset(scene, x, z);
+
+    return base_level
+         + slope
+         + wave_long_1 + wave_long_2
+         + wave_mid_1  + wave_mid_2
+         + wave_small_1 + wave_small_2
+         + ripple;
 }
 
 static Vec3 river_surface_normal(const PlanetScene *scene, float x, float z)
 {
-    const float e = 0.08f;
+    const float e = 0.12f;
 
     float hl = river_surface_height(scene, x - e, z);
     float hr = river_surface_height(scene, x + e, z);
@@ -215,11 +256,11 @@ static Vec3 river_surface_normal(const PlanetScene *scene, float x, float z)
 static void draw_river(const PlanetScene *scene)
 {
     int i;
-    const int segments = 140;
+    const int segments = 220;
     float z0, z1, step;
 
-    const GLfloat river_specular[]  = { 0.18f, 0.18f, 0.22f, 1.0f };
-    const GLfloat river_shininess[] = { 22.0f };
+    const GLfloat river_specular[]  = { 0.32f, 0.32f, 0.36f, 1.0f };
+    const GLfloat river_shininess[] = { 34.0f };
 
     if(!scene->has_river){
         return;
@@ -247,42 +288,108 @@ static void draw_river(const PlanetScene *scene)
         float center_a = river_center_x(scene, za);
         float center_b = river_center_x(scene, zb);
 
-        /* kicsit szélesebb folyó */
         float half_w_a = scene->river_half_width + 5.0f;
         float half_w_b = scene->river_half_width + 5.0f;
-        
+
         float left_a  = center_a - half_w_a;
         float right_a = center_a + half_w_a;
         float left_b  = center_b - half_w_b;
         float right_b = center_b + half_w_b;
-        
-        float yla = river_surface_height(scene, left_a,  za);
-        float yra = river_surface_height(scene, right_a, za);
-        float ylb = river_surface_height(scene, left_b,  zb);
-        float yrb = river_surface_height(scene, right_b, zb);
 
-        Vec3 nla = river_surface_normal(scene, left_a,  za);
-        Vec3 nra = river_surface_normal(scene, right_a, za);
-        Vec3 nlb = river_surface_normal(scene, left_b,  zb);
-        Vec3 nrb = river_surface_normal(scene, right_b, zb);
+        float foam_band_a = half_w_a * 0.10f;
+        float foam_band_b = half_w_b * 0.10f;
 
+        float inner_left_a  = left_a  + foam_band_a;
+        float inner_right_a = right_a - foam_band_a;
+        float inner_left_b  = left_b  + foam_band_b;
+        float inner_right_b = right_b - foam_band_b;
+
+        float yla  = river_surface_height(scene, left_a, za);
+        float yra  = river_surface_height(scene, right_a, za);
+        float ylb  = river_surface_height(scene, left_b, zb);
+        float yrb  = river_surface_height(scene, right_b, zb);
+
+        float yila = river_surface_height(scene, inner_left_a, za)  + 0.010f;
+        float yira = river_surface_height(scene, inner_right_a, za) + 0.010f;
+        float yilb = river_surface_height(scene, inner_left_b, zb)  + 0.010f;
+        float yirb = river_surface_height(scene, inner_right_b, zb) + 0.010f;
+
+        Vec3 nla  = river_surface_normal(scene, left_a, za);
+        Vec3 nra  = river_surface_normal(scene, right_a, za);
+        Vec3 nlb  = river_surface_normal(scene, left_b, zb);
+        Vec3 nrb  = river_surface_normal(scene, right_b, zb);
+
+        Vec3 nila = river_surface_normal(scene, inner_left_a, za);
+        Vec3 nira = river_surface_normal(scene, inner_right_a, za);
+        Vec3 nilb = river_surface_normal(scene, inner_left_b, zb);
+        Vec3 nirb = river_surface_normal(scene, inner_right_b, zb);
+
+        float foam_anim_a = 0.5f + 0.5f * sinf(za * 2.6f);
+        float foam_anim_b = 0.5f + 0.5f * sinf(zb * 2.6f);
+
+        float foam_alpha_a = 0.82f + 0.12f * foam_anim_a;
+        float foam_alpha_b = 0.82f + 0.12f * foam_anim_b;
+
+        /* fő víztest: egységesebb, nem sávos */
         glBegin(GL_QUADS);
 
-        glColor4f(0.07f, 0.28f, 0.68f, 0.90f);
+        glColor4f(0.08f, 0.30f, 0.70f, 0.92f);
+        glNormal3f(nila.x, nila.y, nila.z);
+        glVertex3f(inner_left_a, yila, za);
+
+        glColor4f(0.07f, 0.27f, 0.62f, 0.94f);
+        glNormal3f(nira.x, nira.y, nira.z);
+        glVertex3f(inner_right_a, yira, za);
+
+        glColor4f(0.07f, 0.27f, 0.62f, 0.94f);
+        glNormal3f(nirb.x, nirb.y, nirb.z);
+        glVertex3f(inner_right_b, yirb, zb);
+
+        glColor4f(0.08f, 0.30f, 0.70f, 0.92f);
+        glNormal3f(nilb.x, nilb.y, nilb.z);
+        glVertex3f(inner_left_b, yilb, zb);
+
+        glEnd();
+
+        /* bal oldali hab */
+        glBegin(GL_QUADS);
+
+        glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_a);
         glNormal3f(nla.x, nla.y, nla.z);
-        glVertex3f(left_a, yla, za);
+        glVertex3f(left_a, yla + 0.018f, za);
 
-        glColor4f(0.10f, 0.36f, 0.82f, 0.90f);
-        glNormal3f(nra.x, nra.y, nra.z);
-        glVertex3f(right_a, yra, za);
+        glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
+        glNormal3f(nila.x, nila.y, nila.z);
+        glVertex3f(inner_left_a, yila + 0.006f, za);
 
-        glColor4f(0.09f, 0.34f, 0.78f, 0.90f);
-        glNormal3f(nrb.x, nrb.y, nrb.z);
-        glVertex3f(right_b, yrb, zb);
+        glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
+        glNormal3f(nilb.x, nilb.y, nilb.z);
+        glVertex3f(inner_left_b, yilb + 0.006f, zb);
 
-        glColor4f(0.06f, 0.24f, 0.62f, 0.90f);
+        glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_b);
         glNormal3f(nlb.x, nlb.y, nlb.z);
-        glVertex3f(left_b, ylb, zb);
+        glVertex3f(left_b, ylb + 0.018f, zb);
+
+        glEnd();
+
+        /* jobb oldali hab */
+        glBegin(GL_QUADS);
+
+        glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
+        glNormal3f(nira.x, nira.y, nira.z);
+        glVertex3f(inner_right_a, yira + 0.006f, za);
+
+        glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_a);
+        glNormal3f(nra.x, nra.y, nra.z);
+        glVertex3f(right_a, yra + 0.018f, za);
+
+        glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_b);
+        glNormal3f(nrb.x, nrb.y, nrb.z);
+        glVertex3f(right_b, yrb + 0.018f, zb);
+
+        glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
+        glNormal3f(nirb.x, nirb.y, nirb.z);
+        glVertex3f(inner_right_b, yirb + 0.006f, zb);
 
         glEnd();
     }
@@ -769,6 +876,49 @@ static void draw_thrown_stones(const PlanetScene *scene)
     }
 }
 
+static void draw_river_splashes(const PlanetScene *scene)
+{
+    int i;
+
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    for(i = 0; i < (int)(sizeof(scene->ripples) / sizeof(scene->ripples[0])); ++i){
+        const WaterRipple *r = &scene->ripples[i];
+        if(!r->active){
+            continue;
+        }
+
+        {
+            int j;
+            const int segments = 24;
+            float life_t = r->age / r->life;
+            float radius = r->radius + r->age * r->speed;
+            float alpha = (1.0f - life_t) * 0.65f;
+            float y = r->position.y + 0.02f + 0.08f * (1.0f - life_t);
+
+            glBegin(GL_TRIANGLE_STRIP);
+            for(j = 0; j <= segments; ++j){
+                float a = ((float)j / (float)segments) * 2.0f * (float)M_PI;
+                float ca = cosf(a);
+                float sa = sinf(a);
+
+                glColor4f(0.85f, 0.92f, 0.98f, 0.0f);
+                glVertex3f(r->position.x + ca * (radius - 0.10f), y, r->position.z + sa * (radius - 0.10f));
+
+                glColor4f(0.90f, 0.96f, 1.0f, alpha);
+                glVertex3f(r->position.x + ca * radius, y, r->position.z + sa * radius);
+            }
+            glEnd();
+        }
+    }
+
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+}
+
 static void add_object(PlanetScene *scene,
                        SurfaceObjectType type,
                        float x,
@@ -885,6 +1035,35 @@ static ThrownStone *alloc_stone(PlanetScene *scene)
     return NULL;
 }
 
+static WaterRipple *alloc_ripple(PlanetScene *scene)
+{
+    int i;
+    for(i = 0; i < (int)(sizeof(scene->ripples) / sizeof(scene->ripples[0])); ++i){
+        if(!scene->ripples[i].active){
+            return &scene->ripples[i];
+        }
+    }
+    return NULL;
+}
+
+static void spawn_ripple(PlanetScene *scene, Vec3 pos, float strength)
+{
+    WaterRipple *r = alloc_ripple(scene);
+    if(!r){
+        return;
+    }
+
+    r->active = true;
+    r->position = pos;
+    r->age = 0.0f;
+    r->life = 1.8f;
+    r->amplitude = strength;
+    r->radius = 0.15f;
+    r->speed = 4.0f;
+}
+
+
+
 void planet_scene_init(PlanetScene *scene)
 {
     memset(scene, 0, sizeof(*scene));
@@ -923,6 +1102,37 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
     scene->river_half_width = 2.2f;
     scene->river_z_min = -scene->terrain_extent;
     scene->river_z_max =  scene->terrain_extent;
+
+    /* =========================
+   Folyó forrása / kőszáj (NAGYOBB KÖVEK)
+   ========================= */
+{
+    float source_z = scene->river_z_min + 1.0f;
+    float source_x = river_center_x(scene, source_z);
+
+
+    add_object(scene, SURFACE_OBJECT_ROCK,
+               source_x - 1.8f, source_z + 3.0f,
+               0.35f, 0.20f, 0.30f,
+               false, true,
+               NULL);
+    if(last_object(scene)){
+        last_object(scene)->yaw_deg = 64.0f;
+        last_object(scene)->model_scale = 0.01f;
+        last_object(scene)->position.y -= 2.0f;
+    }
+
+    add_object(scene, SURFACE_OBJECT_ROCK,
+               source_x + 1.6f, source_z + 3.5f,
+               0.32f, 0.18f, 0.28f,
+               false, true,
+               NULL);
+    if(last_object(scene)){
+        last_object(scene)->yaw_deg = 198.0f;
+        last_object(scene)->model_scale = 0.01f;
+        last_object(scene)->position.y -= 2.0f;
+    }
+}
 
     scene->spawn_position = vec3(-28.0f,
                                  terrain_height(scene, -28.0f, 22.0f) + scene->eye_height,
@@ -1548,6 +1758,8 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
         return;
     }
 
+    g_river_time += dt;
+
     scene->highlighted_object = find_interactive_index(scene, camera->position, camera->front, 3.0f);
 
     forward_xz = vec3_norm(vec3(camera->front.x, 0.0f, camera->front.z));
@@ -1566,9 +1778,8 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
     if(input_key_down(input, SDL_SCANCODE_D)) desired = vec3_add(desired, vec3_scale(right_xz,    speed * dt));
 
     /* =========================
-   FÉNY ERŐSSÉG ÁLLÍTÁS
-   ========================= */
-
+       FÉNY ERŐSSÉG ÁLLÍTÁS
+       ========================= */
     if(input_key_down(input, SDL_SCANCODE_UP)){
         g_light_intensity += 0.8f * dt;
     }
@@ -1577,7 +1788,6 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
         g_light_intensity -= 0.8f * dt;
     }
 
-    /* clamp */
     if(g_light_intensity < 0.2f) g_light_intensity = 0.2f;
     if(g_light_intensity > 2.5f) g_light_intensity = 2.5f;
 
@@ -1639,6 +1849,19 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
         }
     }
 
+    /* vízhullámok frissítése */
+    for(i = 0; i < (int)(sizeof(scene->ripples) / sizeof(scene->ripples[0])); ++i){
+        WaterRipple *r = &scene->ripples[i];
+        if(!r->active){
+            continue;
+        }
+
+        r->age += dt;
+        if(r->age >= r->life){
+            r->active = false;
+        }
+    }
+
     for(i = 0; i < scene->stone_count; ++i){
         ThrownStone *s = &scene->stones[i];
         if(!s->active){
@@ -1656,12 +1879,15 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
             s->position = vec3_add(s->position, vec3_scale(s->velocity, dt));
 
             if(point_in_river(scene, s->position.x, s->position.z)){
-                float water_y = terrain_height(scene, s->position.x, s->position.z) + 0.08f;
+                float water_y = river_surface_height(scene, s->position.x, s->position.z);
+
                 if(s->position.y <= water_y){
                     s->position.y = water_y;
                     s->splash_done = true;
                     s->velocity = vec3(0.0f, 0.0f, 0.0f);
-                    s->life = 0.5f;
+                    s->life = 0.45f;
+
+                    spawn_ripple(scene, s->position, 0.07f);
                 }
             }else if(s->position.y <= terrain_height(scene, s->position.x, s->position.z) + 0.12f){
                 s->active = false;
@@ -1710,6 +1936,7 @@ void planet_scene_render(const PlanetScene *scene)
     draw_objects(scene);
     draw_thrown_stones(scene);
     draw_river(scene);
+    draw_river_splashes(scene);
 
     teardown_earth_surface_lighting();
 }

@@ -41,6 +41,16 @@ typedef struct ThrownStone{
     bool splash_done;
 } ThrownStone;
 
+typedef struct WaterRipple{
+    bool active;
+    Vec3 position;
+    float age;
+    float life;
+    float amplitude;
+    float radius;
+    float speed;
+} WaterRipple;
+
 typedef struct PlanetScene{
     bool active;
     bool exit_requested;
@@ -79,6 +89,7 @@ typedef struct PlanetScene{
     int stone_count;
     int stones_available;
     ThrownStone stones[24];
+    WaterRipple ripples[16];
 
     char interaction_message[128];
 } PlanetScene;
