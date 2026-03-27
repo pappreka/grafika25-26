@@ -51,6 +51,16 @@ typedef struct WaterRipple{
     float speed;
 } WaterRipple;
 
+typedef struct DustParticle{
+    bool active;
+    Vec3 position;
+    Vec3 velocity;
+    float age;
+    float life;
+    float size;
+    float alpha;
+} DustParticle;
+
 typedef struct PlanetScene{
     bool active;
     bool exit_requested;
@@ -91,6 +101,8 @@ typedef struct PlanetScene{
     ThrownStone stones[24];
     WaterRipple ripples[16];
 
+    DustParticle dust_particles[48];
+
     char interaction_message[128];
 } PlanetScene;
 
@@ -103,5 +115,6 @@ const char *planet_scene_handle_click(PlanetScene *scene, Vec3 camera_position, 
 const char *planet_scene_throw_stone(PlanetScene *scene, Vec3 camera_position, Vec3 camera_forward);
 bool planet_scene_should_exit(const PlanetScene *scene);
 const char *planet_scene_get_prompt(const PlanetScene *scene, Vec3 camera_position, Vec3 camera_forward);
+void planet_scene_render_with_camera(const PlanetScene *scene, const Camera *camera);
 
 #endif

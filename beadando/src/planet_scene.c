@@ -38,6 +38,8 @@ typedef struct SurfaceAssets{
 static SurfaceAssets g_assets;
 static float g_light_intensity = 1.0f;
 static float g_river_time = 0.0f;
+static Vec3 g_cam_right;
+static Vec3 g_cam_up;
 
 static float mountain_ring_inner_radius(const PlanetScene *scene)
 {
@@ -426,44 +428,89 @@ static void draw_river(const PlanetScene *scene)
     glEnable(GL_CULL_FACE);
 }
 
-static float terrain_height(const PlanetScene *scene, float x, float z)
+static float crater_shape(float dx, float dz, float radius, float depth)
 {
-    float hills = 0.40f * sinf(x * 0.08f) + 0.24f * cosf(z * 0.07f);
-    float detail = 0.10f * sinf((x + z) * 0.16f);
-    float h = hills + detail;
+    float d = sqrtf(dx * dx + dz * dz) / radius;
 
-    if(scene->has_river){
-        float cx = river_center_x(scene, z);
-        float lake = lake_blend(scene, z);
-
-        /*
-            A tó felé csak a szélesség nőjön,
-            a mélység maradjon közel ugyanaz, mint a folyónál.
-        */
-        float cut_half_width = (scene->river_half_width + 0.35f) + lake * 3.0f;
-        float dx = (x - cx) / cut_half_width;
-
-        float river_cut = expf(-(dx * dx) * 1.6f) * 1.35f;
-        float bank_shape = expf(-(dx * dx) * 0.45f) * 0.18f;
-
-        h -= river_cut;
-        h -= bank_shape;
+    if(d >= 1.0f){
+        return 0.0f;
     }
 
-    return h;
+    /* egyszerű, olcsóbb kráterprofil */
+    {
+        float bowl = 1.0f - d * d;
+        float rim = 1.0f - fabsf(d - 0.82f) / 0.18f;
+
+        if(rim < 0.0f){
+            rim = 0.0f;
+        }
+
+        return -depth * bowl + depth * 0.22f * rim;
+    }
+}
+
+static float terrain_height(const PlanetScene *scene, float x, float z)
+{
+    if(scene->planet_index == 1){
+        float h = 0.0f;
+
+        h += 0.02f * sinf(x * 0.04f);
+        h += 0.02f * cosf(z * 0.04f);
+
+        h += crater_shape(x - 10.0f, z - 10.0f, 8.0f, 1.0f);
+        h += crater_shape(x + 15.0f, z - 5.0f, 6.0f, 0.8f);
+        h += crater_shape(x - 5.0f, z + 18.0f, 5.0f, 0.7f);
+        h += crater_shape(x + 12.0f, z + 14.0f, 9.0f, 1.2f);
+        h += crater_shape(x - 20.0f, z, 7.0f, 0.9f);
+
+        return h;
+    }
+
+    {
+        float hills = 0.40f * sinf(x * 0.08f) + 0.24f * cosf(z * 0.07f);
+        float detail = 0.10f * sinf((x + z) * 0.16f);
+        float h = hills + detail;
+
+        if(scene->has_river){
+            float cx = river_center_x(scene, z);
+            float lake = lake_blend(scene, z);
+            float cut_half_width = (scene->river_half_width + 0.35f) + lake * 3.0f;
+            float dx = (x - cx) / cut_half_width;
+            float river_cut = expf(-(dx * dx) * 1.6f) * 1.35f;
+            float bank_shape = expf(-(dx * dx) * 0.45f) * 0.18f;
+
+            h -= river_cut;
+            h -= bank_shape;
+        }
+
+        return h;
+    }
 }
 
 static Vec3 terrain_normal(const PlanetScene *scene, float x, float z)
 {
-    const float e = 0.25f;
+    if(scene->planet_index == 1){
+        const float e = 0.45f;
 
-    float hl = terrain_height(scene, x - e, z);
-    float hr = terrain_height(scene, x + e, z);
-    float hd = terrain_height(scene, x, z - e);
-    float hu = terrain_height(scene, x, z + e);
+        float hl = terrain_height(scene, x - e, z);
+        float hr = terrain_height(scene, x + e, z);
+        float hd = terrain_height(scene, x, z - e);
+        float hu = terrain_height(scene, x, z + e);
 
-    Vec3 n = vec3(hl - hr, 2.0f * e, hd - hu);
-    return vec3_norm(n);
+        Vec3 n = vec3(hl - hr, 2.0f * e, hd - hu);
+        return vec3_norm(n);
+    }
+
+    {
+        const float e = 0.25f;
+        float hl = terrain_height(scene, x - e, z);
+        float hr = terrain_height(scene, x + e, z);
+        float hd = terrain_height(scene, x, z - e);
+        float hu = terrain_height(scene, x, z + e);
+
+        Vec3 n = vec3(hl - hr, 2.0f * e, hd - hu);
+        return vec3_norm(n);
+    }
 }
 
 static bool point_in_river(const PlanetScene *scene, float x, float z)
@@ -568,6 +615,10 @@ static void draw_mountain_ring(const PlanetScene *scene)
     const GLfloat mountain_specular[] = { 0.0f, 0.0f, 0.0f, 1.0f };
     const GLfloat mountain_shininess[] = { 0.0f };
 
+    if(scene->planet_index == 1){
+        return;
+    }
+
     glEnable(GL_LIGHTING);
     glDisable(GL_CULL_FACE);
     glDisable(GL_TEXTURE_2D);
@@ -660,7 +711,7 @@ static void draw_mountain_ring(const PlanetScene *scene)
 
 static void draw_terrain(const PlanetScene *scene)
 {
-    const int steps = 160;
+    const int steps = (scene->planet_index == 1) ? 72 : 160;
     const float extent = scene->terrain_extent;
     const float step = (extent * 2.0f) / (float)steps;
     int iz, ix;
@@ -686,6 +737,12 @@ static void draw_terrain(const PlanetScene *scene)
 
             Vec3 n0 = terrain_normal(scene, x, z0);
             Vec3 n1 = terrain_normal(scene, x, z1);
+
+            if(scene->planet_index == 1){
+                glColor3f(0.55f, 0.52f, 0.48f);
+            }else{
+                glColor3f(scene->ground_r, scene->ground_g, scene->ground_b);
+            }
 
             glNormal3f(n0.x, n0.y, n0.z);
             glVertex3f(x, y0, z0);
@@ -1036,7 +1093,154 @@ static void spawn_ripple(PlanetScene *scene, Vec3 pos, float strength)
     r->speed = 4.0f;
 }
 
+static DustParticle *alloc_dust_particle(PlanetScene *scene)
+{
+    int i;
 
+    for(i = 0; i < (int)(sizeof(scene->dust_particles) / sizeof(scene->dust_particles[0])); ++i){
+        if(!scene->dust_particles[i].active){
+            return &scene->dust_particles[i];
+        }
+    }
+
+    return NULL;
+}
+
+static float frand_range(float a, float b)
+{
+    return a + (b - a) * ((float)rand() / (float)RAND_MAX);
+}
+
+static void spawn_dust_burst(PlanetScene *scene, Vec3 origin, Vec3 move_dir, int count, float strength)
+{
+    int i;
+    Vec3 dir = vec3(move_dir.x, 0.0f, move_dir.z);
+
+    if(vec3_len(dir) < 0.0001f){
+        dir = vec3(0.0f, 0.0f, 1.0f);
+    }else{
+        dir = vec3_norm(dir);
+    }
+
+    for(i = 0; i < count; ++i){
+        DustParticle *p = alloc_dust_particle(scene);
+        float side;
+        float forward_jitter;
+        float upward;
+        float spread_x;
+        float spread_z;
+
+        if(!p){
+            return;
+        }
+
+        side = frand_range(-1.0f, 1.0f);
+        forward_jitter = frand_range(-0.35f, 0.35f);
+        upward = frand_range(0.55f, 1.15f) * strength;
+
+        spread_x = -dir.z * side + dir.x * forward_jitter;
+        spread_z =  dir.x * side + dir.z * forward_jitter;
+
+        p->active = true;
+        p->age = 0.0f;
+        p->life = frand_range(0.45f, 0.95f);
+        p->size = frand_range(0.18f, 0.42f) * (0.7f + strength * 0.4f);
+        p->alpha = frand_range(0.22f, 0.42f);
+
+        p->position = vec3(
+            origin.x + spread_x * 0.18f,
+            origin.y + frand_range(0.02f, 0.10f),
+            origin.z + spread_z * 0.18f
+        );
+
+        p->velocity = vec3(
+            spread_x * frand_range(0.45f, 1.10f) * strength,
+            upward,
+            spread_z * frand_range(0.45f, 1.10f) * strength
+        );
+    }
+}
+
+static void update_dust_particles(PlanetScene *scene, float dt)
+{
+    int i;
+
+    for(i = 0; i < (int)(sizeof(scene->dust_particles) / sizeof(scene->dust_particles[0])); ++i){
+        DustParticle *p = &scene->dust_particles[i];
+
+        if(!p->active){
+            continue;
+        }
+
+        p->age += dt;
+        if(p->age >= p->life){
+            p->active = false;
+            continue;
+        }
+
+        p->velocity.x *= (1.0f - dt * 1.6f);
+        p->velocity.z *= (1.0f - dt * 1.6f);
+        p->velocity.y -= 2.2f * dt;
+
+        p->position = vec3_add(p->position, vec3_scale(p->velocity, dt));
+
+        {
+            float ground_y = terrain_height(scene, p->position.x, p->position.z) + 0.015f;
+            if(p->position.y < ground_y){
+                p->position.y = ground_y;
+                p->velocity.x *= 0.55f;
+                p->velocity.z *= 0.55f;
+                p->velocity.y *= -0.10f;
+            }
+        }
+    }
+}
+
+static void draw_dust_particles(const PlanetScene *scene, Vec3 camera_right, Vec3 camera_up)
+{
+    int i;
+
+    glDisable(GL_LIGHTING);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_CULL_FACE);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+
+    glBegin(GL_QUADS);
+    for(i = 0; i < (int)(sizeof(scene->dust_particles) / sizeof(scene->dust_particles[0])); ++i){
+        const DustParticle *p = &scene->dust_particles[i];
+
+        if(!p->active){
+            continue;
+        }
+
+        {
+            float t = p->age / p->life;
+            float alpha = p->alpha * (1.0f - t);
+            float size = p->size * (0.65f + t * 1.1f);
+
+            Vec3 right = vec3_scale(camera_right, size);
+            Vec3 up    = vec3_scale(camera_up, size * 0.55f);
+
+            Vec3 v0 = vec3_add(vec3_sub(p->position, right), up);
+            Vec3 v1 = vec3_add(vec3_add(p->position, right), up);
+            Vec3 v2 = vec3_sub(vec3_add(p->position, right), up);
+            Vec3 v3 = vec3_sub(vec3_sub(p->position, right), up);
+
+            glColor4f(0.72f, 0.68f, 0.60f, alpha); glVertex3f(v0.x, v0.y, v0.z);
+            glColor4f(0.72f, 0.68f, 0.60f, alpha); glVertex3f(v1.x, v1.y, v1.z);
+            glColor4f(0.72f, 0.68f, 0.60f, 0.0f);  glVertex3f(v2.x, v2.y, v2.z);
+            glColor4f(0.72f, 0.68f, 0.60f, 0.0f);  glVertex3f(v3.x, v3.y, v3.z);
+        }
+    }
+    glEnd();
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+}
 
 void planet_scene_init(PlanetScene *scene)
 {
@@ -1068,6 +1272,48 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
     planet_scene_init(scene);
     scene->active = true;
     scene->planet_index = planet_index;
+
+    if(planet_index == 1){
+        strcpy(scene->planet_name, "Mercury Surface");
+
+        scene->terrain_extent = 55.0f;
+        scene->eye_height = 1.75f;
+        scene->move_speed = 3.0f;
+        scene->run_multiplier = 1.4f;
+        scene->jump_velocity = 3.0f;
+        scene->gravity = 6.0f;
+
+        scene->ground_r = 0.46f;
+        scene->ground_g = 0.43f;
+        scene->ground_b = 0.39f;
+
+        scene->has_river = false;
+
+        add_object(scene, SURFACE_OBJECT_SHIP,
+                   0.0f, 0.0f,
+                   10.0f, 7.0f, 10.0f,
+                   true, true,
+                   "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+        if(last_object(scene)){
+            SurfaceObject *ship = last_object(scene);
+
+            ship->yaw_deg = 180.0f;
+            ship->model_scale = 0.45f;
+
+            scene->spawn_position = vec3(
+                0.0f,
+                terrain_height(scene, 0.0f, 6.0f) + scene->eye_height,
+                6.0f
+            );
+
+            scene->spawn_yaw_deg = 180.0f;
+            scene->spawn_pitch_deg = -5.0f;
+        }
+
+        scene->grounded = true;
+        scene->vertical_velocity = 0.0f;
+        return;
+    }
 
     strcpy(scene->planet_name, "Earth Surface");
 
@@ -1721,7 +1967,7 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
     Vec3 desired = camera->position;
     Vec3 forward_xz, right_xz;
     float speed = scene->move_speed;
-    const float player_radius = 0.55f;
+    const float player_radius = 0.45f;
     int i;
 
     if(!scene->active){
@@ -1747,9 +1993,6 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
     if(input_key_down(input, SDL_SCANCODE_A)) desired = vec3_add(desired, vec3_scale(right_xz,   -speed * dt));
     if(input_key_down(input, SDL_SCANCODE_D)) desired = vec3_add(desired, vec3_scale(right_xz,    speed * dt));
 
-    /* =========================
-       FÉNY ERŐSSÉG ÁLLÍTÁS
-       ========================= */
     if(input_key_down(input, SDL_SCANCODE_UP)){
         g_light_intensity += 0.8f * dt;
     }
@@ -1790,20 +2033,62 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
     if(scene->grounded && input_key_pressed(input, SDL_SCANCODE_SPACE)){
         scene->vertical_velocity = scene->jump_velocity;
         scene->grounded = false;
+
+        if(scene->planet_index == 1){
+            Vec3 burst_origin = vec3(
+                camera->position.x,
+                terrain_height(scene, camera->position.x, camera->position.z) + 0.03f,
+                camera->position.z
+            );
+            spawn_dust_burst(scene, burst_origin, forward_xz, 10, 1.0f);
+        }
     }
 
     scene->vertical_velocity -= scene->gravity * dt;
 
     {
         float ground_y = terrain_height(scene, desired.x, desired.z) + scene->eye_height;
+        bool was_grounded = scene->grounded;
+
         desired.y = camera->position.y + scene->vertical_velocity * dt;
 
         if(desired.y <= ground_y){
             desired.y = ground_y;
             scene->vertical_velocity = 0.0f;
             scene->grounded = true;
+
+            if(scene->planet_index == 1 && !was_grounded){
+                Vec3 burst_origin = vec3(
+                    desired.x,
+                    terrain_height(scene, desired.x, desired.z) + 0.03f,
+                    desired.z
+                );
+                spawn_dust_burst(scene, burst_origin, forward_xz, 12, 1.15f);
+            }
         }else{
             scene->grounded = false;
+        }
+    }
+
+    if(scene->planet_index == 1 && scene->grounded){
+        float move_dx = desired.x - camera->position.x;
+        float move_dz = desired.z - camera->position.z;
+        float move_len2 = move_dx * move_dx + move_dz * move_dz;
+
+        if(move_len2 > 0.00002f){
+            static float dust_accum = 0.0f;
+            Vec3 move_dir = vec3_norm(vec3(move_dx, 0.0f, move_dz));
+
+            dust_accum += dt;
+            if(dust_accum >= 0.055f){
+                Vec3 burst_origin = vec3(
+                    desired.x,
+                    terrain_height(scene, desired.x, desired.z) + 0.02f,
+                    desired.z
+                );
+                spawn_dust_burst(scene, burst_origin, move_dir, 3, 0.65f);
+                dust_accum = 0.0f;
+            }
         }
     }
 
@@ -1819,7 +2104,6 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
         }
     }
 
-    /* vízhullámok frissítése */
     for(i = 0; i < (int)(sizeof(scene->ripples) / sizeof(scene->ripples[0])); ++i){
         WaterRipple *r = &scene->ripples[i];
         if(!r->active){
@@ -1864,45 +2148,208 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
             }
         }
     }
+
+    update_dust_particles(scene, dt);
+    g_cam_right = camera->right;
+    g_cam_up    = camera->up;
 }
 
-void planet_scene_render(const PlanetScene *scene)
+void planet_scene_render_with_camera(const PlanetScene *scene, const Camera *camera)
 {
     if(!scene->active){
         return;
     }
 
-    setup_earth_surface_lighting();
+    if(scene->planet_index == 1){
 
-    /* =========================
-   DINAMIKUS FÉNY (NAP)
-   ========================= */
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        const GLfloat global_ambient[] = { 0.05f, 0.05f, 0.05f, 1.0f };
+        const GLfloat light0_position[] = { 80.0f, 55.0f, 25.0f, 1.0f };
+        const GLfloat light0_ambient[]  = { 0.04f, 0.04f, 0.04f, 1.0f };
+        const GLfloat light0_diffuse[]  = { 1.05f, 1.00f, 0.90f, 1.0f };
+        const GLfloat light0_specular[] = { 0.35f, 0.33f, 0.30f, 1.0f };
+        const GLfloat mat_specular[]    = { 0.08f, 0.08f, 0.08f, 1.0f };
+        const GLfloat mat_shininess[]   = { 6.0f };
+
+        glEnable(GL_LIGHTING);
+        glEnable(GL_LIGHT0);
+        glEnable(GL_COLOR_MATERIAL);
+        glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+        glEnable(GL_NORMALIZE);
+        glShadeModel(GL_SMOOTH);
+
+        glLightModelfv(GL_LIGHT_MODEL_AMBIENT, global_ambient);
+        glLightfv(GL_LIGHT0, GL_POSITION, light0_position);
+        glLightfv(GL_LIGHT0, GL_AMBIENT,  light0_ambient);
+        glLightfv(GL_LIGHT0, GL_DIFFUSE,  light0_diffuse);
+        glLightfv(GL_LIGHT0, GL_SPECULAR, light0_specular);
+
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+
+        draw_terrain(scene);
+        draw_objects(scene);
+        draw_dust_particles(scene, camera->right, camera->up);
+
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_LIGHT0);
+        glDisable(GL_LIGHTING);
+        return;
+    }
+
+    glClearColor(0.55f, 0.75f, 0.95f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    setup_earth_surface_lighting();
 
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
 
-    GLfloat light_pos[] = { 50.0f, 80.0f, 50.0f, 1.0f };
+    {
+        GLfloat light_pos[] = { 50.0f, 80.0f, 50.0f, 1.0f };
+        float i_light = g_light_intensity;
+        GLfloat ambient[]  = { 0.2f * i_light, 0.2f * i_light, 0.2f * i_light, 1.0f };
+        GLfloat diffuse[]  = { 0.9f * i_light, 0.9f * i_light, 0.85f * i_light, 1.0f };
+        GLfloat specular[] = { 1.0f * i_light, 1.0f * i_light, 1.0f * i_light, 1.0f };
+        GLfloat mat_spec[] = { 0.3f, 0.3f, 0.3f, 1.0f };
 
-    /* intenzitás skálázás */
-    float i = g_light_intensity;
+        glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
+        glLightfv(GL_LIGHT0, GL_AMBIENT,  ambient);
+        glLightfv(GL_LIGHT0, GL_DIFFUSE,  diffuse);
+        glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
 
-    GLfloat ambient[]  = { 0.2f * i, 0.2f * i, 0.2f * i, 1.0f };
-    GLfloat diffuse[]  = { 0.9f * i, 0.9f * i, 0.85f * i, 1.0f };
-    GLfloat specular[] = { 1.0f * i, 1.0f * i, 1.0f * i, 1.0f };
-
-    glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
-    glLightfv(GL_LIGHT0, GL_AMBIENT,  ambient);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE,  diffuse);
-    glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
-
-    /* anyag */
-    GLfloat mat_spec[] = { 0.3f, 0.3f, 0.3f, 1.0f };
-    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_spec);
-    glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 16.0f);
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_spec);
+        glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 16.0f);
+    }
 
     draw_terrain(scene);
     draw_mountain_ring(scene);
+    draw_objects(scene);
+    draw_thrown_stones(scene);
+    draw_river(scene);
+    draw_river_splashes(scene);
 
+    teardown_earth_surface_lighting();
+}
+
+void planet_scene_render(const PlanetScene *scene)
+{
+    int i;
+
+    if(!scene->active){
+        return;
+    }
+
+    if(scene->planet_index == 1){
+        const GLfloat global_ambient[] = { 0.05f, 0.05f, 0.05f, 1.0f };
+        const GLfloat light0_position[] = { 80.0f, 55.0f, 25.0f, 1.0f };
+        const GLfloat light0_ambient[]  = { 0.04f, 0.04f, 0.04f, 1.0f };
+        const GLfloat light0_diffuse[]  = { 1.05f, 1.00f, 0.90f, 1.0f };
+        const GLfloat light0_specular[] = { 0.35f, 0.33f, 0.30f, 1.0f };
+        const GLfloat mat_specular[]    = { 0.08f, 0.08f, 0.08f, 1.0f };
+        const GLfloat mat_shininess[]   = { 6.0f };
+
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glEnable(GL_LIGHTING);
+        glEnable(GL_LIGHT0);
+        glEnable(GL_COLOR_MATERIAL);
+        glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+        glEnable(GL_NORMALIZE);
+        glShadeModel(GL_SMOOTH);
+
+        glLightModelfv(GL_LIGHT_MODEL_AMBIENT, global_ambient);
+        glLightfv(GL_LIGHT0, GL_POSITION, light0_position);
+        glLightfv(GL_LIGHT0, GL_AMBIENT,  light0_ambient);
+        glLightfv(GL_LIGHT0, GL_DIFFUSE,  light0_diffuse);
+        glLightfv(GL_LIGHT0, GL_SPECULAR, light0_specular);
+
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+
+        draw_terrain(scene);
+
+        /* 2. árnyék a talajra */
+        glDisable(GL_LIGHTING);
+        glDisable(GL_TEXTURE_2D);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_DEPTH_TEST);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        for(i = 0; i < scene->object_count; ++i){
+            const SurfaceObject *o = &scene->objects[i];
+
+            if(o->type != SURFACE_OBJECT_SHIP){
+                continue;
+            }
+
+            {
+                int a;
+                const int shadow_segments = 40;
+                /* kicsi eltolás a fény irányába, de ne csússzon el túl messzire */
+                float sx = o->position.x - 0.75f;
+                float sz = o->position.z + 0.15f;
+                float sy = -0.20f;
+                float rx = 3.0f;
+                float rz = 1.9f;
+
+                glColor4f(0.02f, 0.02f, 0.02f, 0.42f);
+
+                glBegin(GL_TRIANGLE_FAN);
+                glVertex3f(sx, sy, sz);
+
+                for(a = 0; a <= shadow_segments; ++a){
+                    float ang = ((float)a / (float)shadow_segments) * 2.0f * (float)M_PI;
+                    float px = sx + cosf(ang) * rx;
+                    float pz = sz + sinf(ang) * rz;
+
+                    glVertex3f(px, sy, pz);
+                }
+                glEnd();
+            }
+        }
+
+        glEnable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        glEnable(GL_CULL_FACE);
+
+        glEnable(GL_LIGHTING);
+        draw_objects(scene);
+
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_LIGHT0);
+        glDisable(GL_LIGHTING);
+        return;
+    }
+
+    setup_earth_surface_lighting();
+
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+
+    {
+        GLfloat light_pos[] = { 50.0f, 80.0f, 50.0f, 1.0f };
+        float i_light = g_light_intensity;
+        GLfloat ambient[]  = { 0.2f * i_light, 0.2f * i_light, 0.2f * i_light, 1.0f };
+        GLfloat diffuse[]  = { 0.9f * i_light, 0.9f * i_light, 0.85f * i_light, 1.0f };
+        GLfloat specular[] = { 1.0f * i_light, 1.0f * i_light, 1.0f * i_light, 1.0f };
+        GLfloat mat_spec[] = { 0.3f, 0.3f, 0.3f, 1.0f };
+
+        glLightfv(GL_LIGHT0, GL_POSITION, light_pos);
+        glLightfv(GL_LIGHT0, GL_AMBIENT,  ambient);
+        glLightfv(GL_LIGHT0, GL_DIFFUSE,  diffuse);
+        glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
+
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_spec);
+        glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 16.0f);
+    }
+
+    draw_terrain(scene);
+    draw_mountain_ring(scene);
     draw_objects(scene);
     draw_thrown_stones(scene);
     draw_river(scene);
@@ -1973,7 +2420,7 @@ const char *planet_scene_handle_click(PlanetScene *scene, Vec3 camera_position, 
 
         snprintf(scene->interaction_message,
                  sizeof(scene->interaction_message),
-                 "Az urhajora kattintottal, az ajto kinyilt.");
+                 "Az urhajora kattintottal, visszatersz az attekinto nezetbe.");
 
         return scene->interaction_message;
     }
