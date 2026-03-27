@@ -214,10 +214,19 @@ static float river_center_x(const PlanetScene *scene, float z)
     return scene->river_x + sinf(z * 0.045f) * 1.6f;
 }
 
+static float lake_blend(const PlanetScene *scene, float z)
+{
+    float start_z = scene->river_z_max - 14.0f;
+    float t = (z - start_z) / (scene->river_z_max - start_z);
+
+    if(t < 0.0f) t = 0.0f;
+    if(t > 1.0f) t = 1.0f;
+
+    return t * t * (3.0f - 2.0f * t);
+}
+
 static float river_surface_height(const PlanetScene *scene, float x, float z)
 {
-    (void)scene;
-
     float base_level = -0.42f;
     float slope = -0.10f * (z / 45.0f);
 
@@ -231,6 +240,19 @@ static float river_surface_height(const PlanetScene *scene, float x, float z)
     float wave_small_2 = 0.006f * cosf(z * 2.90f - x * 0.28f - g_river_time * 2.70f);
 
     float ripple = ripple_height_offset(scene, x, z);
+
+    /* a tóban nyugodtabb legyen a víz, de ne emelkedjen meg */
+    {
+        float lake = lake_blend(scene, z);
+        float calm = 1.0f - 0.45f * lake;
+
+        wave_long_1 *= calm;
+        wave_long_2 *= calm;
+        wave_mid_1  *= calm;
+        wave_mid_2  *= calm;
+        wave_small_1 *= calm;
+        wave_small_2 *= calm;
+    }
 
     return base_level
          + slope
@@ -288,8 +310,12 @@ static void draw_river(const PlanetScene *scene)
         float center_a = river_center_x(scene, za);
         float center_b = river_center_x(scene, zb);
 
-        float half_w_a = scene->river_half_width + 5.0f;
-        float half_w_b = scene->river_half_width + 5.0f;
+        /* a végén tónak szélesedik, de nem túlzásba vive */
+        float lake_a = lake_blend(scene, za);
+        float lake_b = lake_blend(scene, zb);
+
+        float half_w_a = (scene->river_half_width + 5.0f) + lake_a * 3.0f;
+        float half_w_b = (scene->river_half_width + 5.0f) + lake_b * 3.0f;
 
         float left_a  = center_a - half_w_a;
         float right_a = center_a + half_w_a;
@@ -330,7 +356,10 @@ static void draw_river(const PlanetScene *scene)
         float foam_alpha_a = 0.82f + 0.12f * foam_anim_a;
         float foam_alpha_b = 0.82f + 0.12f * foam_anim_b;
 
-        /* fő víztest: egységesebb, nem sávos */
+        /* a tóban kevesebb hab */
+        foam_alpha_a *= (1.0f - 0.25f * lake_a);
+        foam_alpha_b *= (1.0f - 0.25f * lake_b);
+
         glBegin(GL_QUADS);
 
         glColor4f(0.08f, 0.30f, 0.70f, 0.92f);
@@ -351,45 +380,43 @@ static void draw_river(const PlanetScene *scene)
 
         glEnd();
 
-        /* bal oldali hab */
         glBegin(GL_QUADS);
 
         glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_a);
         glNormal3f(nla.x, nla.y, nla.z);
-        glVertex3f(left_a, yla + 0.018f, za);
+        glVertex3f(left_a, yla + 0.006f, za);
 
         glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
         glNormal3f(nila.x, nila.y, nila.z);
-        glVertex3f(inner_left_a, yila + 0.006f, za);
+        glVertex3f(inner_left_a, yila + 0.002f, za);
 
         glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
         glNormal3f(nilb.x, nilb.y, nilb.z);
-        glVertex3f(inner_left_b, yilb + 0.006f, zb);
+        glVertex3f(inner_left_b, yilb + 0.002f, zb);
 
         glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_b);
         glNormal3f(nlb.x, nlb.y, nlb.z);
-        glVertex3f(left_b, ylb + 0.018f, zb);
+        glVertex3f(left_b, ylb + 0.006f, zb);
 
         glEnd();
 
-        /* jobb oldali hab */
         glBegin(GL_QUADS);
 
         glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
         glNormal3f(nira.x, nira.y, nira.z);
-        glVertex3f(inner_right_a, yira + 0.006f, za);
+        glVertex3f(inner_right_a, yira + 0.002f, za);
 
         glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_a);
         glNormal3f(nra.x, nra.y, nra.z);
-        glVertex3f(right_a, yra + 0.018f, za);
+        glVertex3f(right_a, yra + 0.006f, za);
 
         glColor4f(0.88f, 0.93f, 0.96f, foam_alpha_b);
         glNormal3f(nrb.x, nrb.y, nrb.z);
-        glVertex3f(right_b, yrb + 0.018f, zb);
+        glVertex3f(right_b, yrb + 0.006f, zb);
 
         glColor4f(0.70f, 0.82f, 0.90f, 0.70f);
         glNormal3f(nirb.x, nirb.y, nirb.z);
-        glVertex3f(inner_right_b, yirb + 0.006f, zb);
+        glVertex3f(inner_right_b, yirb + 0.002f, zb);
 
         glEnd();
     }
@@ -407,12 +434,16 @@ static float terrain_height(const PlanetScene *scene, float x, float z)
 
     if(scene->has_river){
         float cx = river_center_x(scene, z);
-        float dx = (x - cx) / (scene->river_half_width + 0.35f);
+        float lake = lake_blend(scene, z);
 
-        /* szélesebb, simább meder */
+        /*
+            A tó felé csak a szélesség nőjön,
+            a mélység maradjon közel ugyanaz, mint a folyónál.
+        */
+        float cut_half_width = (scene->river_half_width + 0.35f) + lake * 3.0f;
+        float dx = (x - cx) / cut_half_width;
+
         float river_cut = expf(-(dx * dx) * 1.6f) * 1.35f;
-
-        /* partközeli lágyítás */
         float bank_shape = expf(-(dx * dx) * 0.45f) * 0.18f;
 
         h -= river_cut;
@@ -438,6 +469,7 @@ static Vec3 terrain_normal(const PlanetScene *scene, float x, float z)
 static bool point_in_river(const PlanetScene *scene, float x, float z)
 {
     float cx;
+    float half_w;
 
     if(!scene->has_river){
         return false;
@@ -447,7 +479,9 @@ static bool point_in_river(const PlanetScene *scene, float x, float z)
     }
 
     cx = river_center_x(scene, z);
-    return fabsf(x - cx) < (scene->river_half_width + 0.35f);
+    half_w = (scene->river_half_width + 0.35f) + lake_blend(scene, z) * 3.0f;
+
+    return fabsf(x - cx) < half_w;
 }
 
 static void setup_earth_surface_lighting(void)
@@ -523,47 +557,6 @@ static void draw_box(Vec3 center, Vec3 half)
 
     glEnd();
 }
-
-static void draw_bbox_wire(Vec3 center, Vec3 half, float r, float g, float b)
-{
-    float x0 = center.x - half.x;
-    float x1 = center.x + half.x;
-    float y0 = center.y - half.y;
-    float y1 = center.y + half.y;
-    float z0 = center.z - half.z;
-    float z1 = center.z + half.z;
-
-    glDisable(GL_TEXTURE_2D);
-    glDisable(GL_LIGHTING);
-    glDisable(GL_DEPTH_TEST);
-    glLineWidth(3.0f);
-    glColor3f(r, g, b);
-
-    glBegin(GL_LINES);
-
-    glVertex3f(x0,y0,z0); glVertex3f(x1,y0,z0);
-    glVertex3f(x1,y0,z0); glVertex3f(x1,y0,z1);
-    glVertex3f(x1,y0,z1); glVertex3f(x0,y0,z1);
-    glVertex3f(x0,y0,z1); glVertex3f(x0,y0,z0);
-
-    glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0);
-    glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1);
-    glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
-    glVertex3f(x0,y1,z1); glVertex3f(x0,y1,z0);
-
-    glVertex3f(x0,y0,z0); glVertex3f(x0,y1,z0);
-    glVertex3f(x1,y0,z0); glVertex3f(x1,y1,z0);
-    glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1);
-    glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1);
-
-    glEnd();
-
-    glLineWidth(1.0f);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_LIGHTING);
-}
-
-
 
 static void draw_mountain_ring(const PlanetScene *scene)
 {
@@ -798,15 +791,6 @@ static void draw_objects(const PlanetScene *scene)
 
     for(i = 0; i < scene->object_count; ++i){
         const SurfaceObject *o = &scene->objects[i];
-        Vec3 bbox_center;
-        Vec3 bbox_half;
-
-        if(o->type == SURFACE_OBJECT_SHIP){
-            get_ship_bbox(o, &bbox_center, &bbox_half);
-        }else{
-            bbox_center = object_bbox_center(o);
-            bbox_half = object_bbox_half(o);
-        }
 
         switch(o->type){
             case SURFACE_OBJECT_SHIP:
@@ -843,14 +827,6 @@ static void draw_objects(const PlanetScene *scene)
                 draw_box(o->position, o->half_extents);
                 break;
         }
-
-        if(o->interactive){
-            draw_bbox_wire(bbox_center, bbox_half, 1.0f, 1.0f, 0.0f);
-        }else if(o->blocks_movement){
-            draw_bbox_wire(bbox_center, bbox_half, 1.0f, 0.0f, 0.0f);
-        }else{
-            draw_bbox_wire(bbox_center, bbox_half, 0.0f, 1.0f, 1.0f);
-        }
     }
 }
 
@@ -871,8 +847,6 @@ static void draw_thrown_stones(const PlanetScene *scene)
         }else{
             draw_box(s->position, vec3(0.12f, 0.12f, 0.12f));
         }
-
-        draw_bbox_wire(s->position, vec3(0.08f, 0.06f, 0.08f), 0.0f, 1.0f, 0.0f);
     }
 }
 
@@ -1134,22 +1108,38 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
     }
 }
 
-    scene->spawn_position = vec3(-28.0f,
-                                 terrain_height(scene, -28.0f, 22.0f) + scene->eye_height,
-                                 22.0f);
-    scene->spawn_yaw_deg = -20.0f;
+    add_object(scene, SURFACE_OBJECT_SHIP,
+           -13.5f, 12.0f,
+           10.0f, 7.0f, 10.0f,
+           true, true,
+           "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+    if(last_object(scene)){
+        SurfaceObject *ship = last_object(scene);
+        float exit_x;
+        float exit_z;
+        float ship_yaw_rad;
+
+        ship->yaw_deg = 145.0f;
+        ship->model_scale = 0.400f;
+
+        ship_yaw_rad = ship->yaw_deg * (float)M_PI / 180.0f;
+
+        /* Az űrhajó mellé/elé tesszük a játékost, mintha onnan szállt volna ki */
+        exit_x = ship->position.x + cosf(ship_yaw_rad) * 6.0f;
+        exit_z = ship->position.z + sinf(ship_yaw_rad) * 6.0f;
+
+        scene->spawn_position = vec3(
+            exit_x,
+            terrain_height(scene, exit_x, exit_z) + scene->eye_height,
+            exit_z
+        );
+
+        /* nézzen nagyjából vissza a hajó felé */
+        scene->spawn_yaw_deg = ship->yaw_deg + 180.0f;
+    }
+
     scene->grounded = true;
     scene->vertical_velocity = 0.0f;
-
-    add_object(scene, SURFACE_OBJECT_SHIP,
-               -13.5f, 12.0f,
-               10.0f, 7.0f, 10.0f,
-               true, true,
-               "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
-    if(last_object(scene)){
-        last_object(scene)->yaw_deg = 145.0f;
-        last_object(scene)->model_scale = 0.400f;
-    }
 
     /* =========================
        Ritkás sziklás zóna
@@ -1437,7 +1427,7 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
     }
 
     add_object(scene, SURFACE_OBJECT_TREE,
-               4.0f, -15.0f,
+               -2.5f, -15.0f,
                2.0f, 5.0f, 2.0f,
                false, true,
                NULL);
@@ -1447,7 +1437,7 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
     }
 
     add_object(scene, SURFACE_OBJECT_TREE,
-               1.5f, -11.0f,
+               14.0f, -11.0f,
                2.1f, 5.2f, 2.1f,
                false, true,
                NULL);
@@ -1723,26 +1713,6 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
     if(last_object(scene)){
         last_object(scene)->yaw_deg = 238.0f;
         last_object(scene)->model_scale = 0.5f;
-    }
-
-    add_object(scene, SURFACE_OBJECT_TREE,
-               -12.0f, 12.0f,
-               2.0f, 5.0f, 2.0f,
-               false, true,
-               NULL);
-    if(last_object(scene)){
-        last_object(scene)->yaw_deg = 292.0f;
-        last_object(scene)->model_scale = 0.5f;
-    }
-
-    add_object(scene, SURFACE_OBJECT_TREE,
-               8.5f, 18.0f,
-               2.1f, 5.2f, 2.1f,
-               false, true,
-               NULL);
-    if(last_object(scene)){
-        last_object(scene)->yaw_deg = 41.0f;
-        last_object(scene)->model_scale = 0.48f;
     }
 }
 
