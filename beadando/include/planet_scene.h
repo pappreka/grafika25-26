@@ -17,7 +17,8 @@ typedef enum SurfaceObjectType{
     SURFACE_OBJECT_CABIN = 6,
     SURFACE_OBJECT_SHIP = 7,
     SURFACE_OBJECT_RIVER_ROCK = 8,
-    SURFACE_OBJECT_LOG = 9
+    SURFACE_OBJECT_LOG = 9,
+    SURFACE_OBJECT_ROVER = 10
 } SurfaceObjectType;
 
 typedef struct SurfaceObject{

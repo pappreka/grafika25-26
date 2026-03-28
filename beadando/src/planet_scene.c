@@ -33,6 +33,7 @@ typedef struct SurfaceAssets{
     SurfaceAsset wild_rock;
     SurfaceAsset throw_rock;
     SurfaceAsset tree;
+    SurfaceAsset rover;
 } SurfaceAssets;
 
 static SurfaceAssets g_assets;
@@ -104,6 +105,11 @@ static void ensure_assets_loaded(void)
                    "assets/models/tree.obj",
                    "tree.obj",
                    "assets/textures/tree.png");
+
+    asset_try_load(&g_assets.rover,
+               "assets/models/mars_rover.obj",
+               "mars_rover.obj",
+               "assets/textures/mars_rover_ao.png");
 }
 
 static void compile_asset_list(SurfaceAsset *asset)
@@ -157,6 +163,62 @@ static void draw_asset(const SurfaceAsset *asset,
     glPushMatrix();
     glTranslatef(position.x, position.y, position.z);
     glRotatef(yaw_deg, 0.0f, 1.0f, 0.0f);
+    glScalef(scale, scale, scale);
+
+    if(asset->list_id != 0){
+        glCallList(asset->list_id);
+    }else{
+        int i;
+        glBegin(GL_TRIANGLES);
+        for(i = 0; i < asset->mesh.vert_count; ++i){
+            const Vertex *v = &asset->mesh.verts[i];
+            glTexCoord2f(v->u, v->v);
+            glNormal3f(v->nx, v->ny, v->nz);
+            glVertex3f(v->px, v->py, v->pz);
+        }
+        glEnd();
+    }
+
+    glPopMatrix();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
+}
+
+static void draw_rover_asset(const SurfaceAsset *asset,
+                             Vec3 position,
+                             float yaw_deg,
+                             float scale,
+                             float time_sec)
+{
+    float scan_yaw = sinf(time_sec * 0.8f) * 8.0f;
+    float rock_z = sinf(time_sec * 1.4f) * 2.5f;
+    float rock_x = cosf(time_sec * 1.1f) * 1.2f;
+    float bob = sinf(time_sec * 1.6f) * 0.05f;
+
+    if(!asset->loaded){
+        return;
+    }
+
+    if(((SurfaceAsset*)asset)->list_id == 0){
+        compile_asset_list((SurfaceAsset*)asset);
+    }
+
+    if(asset->texture_loaded && asset->texture.id != 0){
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)asset->texture.id);
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        glColor3f(0.18f, 0.05f, 0.05f);
+    }else{
+        glDisable(GL_TEXTURE_2D);
+        glColor3f(0.18f, 0.05f, 0.05f);
+    } 
+
+    glPushMatrix();
+    glTranslatef(position.x, position.y + bob, position.z);
+    glRotatef(yaw_deg + scan_yaw, 0.0f, 1.0f, 0.0f);
+    glRotatef(rock_z, 0.0f, 0.0f, 1.0f);
+    glRotatef(rock_x, 1.0f, 0.0f, 0.0f);
     glScalef(scale, scale, scale);
 
     if(asset->list_id != 0){
@@ -466,6 +528,23 @@ static float terrain_height(const PlanetScene *scene, float x, float z)
         return h;
     }
 
+        if(scene->planet_index == 4){
+        float h = 0.0f;
+
+        h += 0.18f * sinf(x * 0.035f);
+        h += 0.15f * cosf(z * 0.040f);
+        h += 0.08f * sinf((x + z) * 0.060f);
+
+        h += crater_shape(x - 12.0f, z - 8.0f, 9.0f, 0.9f);
+        h += crater_shape(x + 16.0f, z + 10.0f, 7.0f, 0.7f);
+        h += crater_shape(x - 4.0f, z + 18.0f, 5.5f, 0.55f);
+        h += crater_shape(x + 20.0f, z - 14.0f, 11.0f, 1.0f);
+
+        h += 0.012f * x;
+
+        return h;
+    }
+
     {
         float hills = 0.40f * sinf(x * 0.08f) + 0.24f * cosf(z * 0.07f);
         float detail = 0.10f * sinf((x + z) * 0.16f);
@@ -570,6 +649,22 @@ static void teardown_earth_surface_lighting(void)
     glDisable(GL_LIGHTING);
 }
 
+static void setup_mars_fog(void)
+{
+    const GLfloat fog_color[] = { 0.62f, 0.34f, 0.22f, 1.0f };
+
+    glEnable(GL_FOG);
+    glFogi(GL_FOG_MODE, GL_EXP2);
+    glFogf(GL_FOG_DENSITY, 0.060f);
+    glFogfv(GL_FOG_COLOR, fog_color);
+    glHint(GL_FOG_HINT, GL_NICEST);
+}
+
+static void teardown_mars_fog(void)
+{
+    glDisable(GL_FOG);
+}
+
 static void draw_box(Vec3 center, Vec3 half)
 {
     float x0 = center.x - half.x;
@@ -615,9 +710,9 @@ static void draw_mountain_ring(const PlanetScene *scene)
     const GLfloat mountain_specular[] = { 0.0f, 0.0f, 0.0f, 1.0f };
     const GLfloat mountain_shininess[] = { 0.0f };
 
-    if(scene->planet_index == 1){
+    if(scene->planet_index == 1 || scene->planet_index == 4){
         return;
-    }
+    }  
 
     glEnable(GL_LIGHTING);
     glDisable(GL_CULL_FACE);
@@ -802,6 +897,13 @@ static Vec3 object_bbox_half(const SurfaceObject *o)
                 o->half_extents.y * 0.33f,
                 o->half_extents.z * 0.22f
             );
+        
+        case SURFACE_OBJECT_ROVER:
+            return vec3(
+                o->half_extents.x * 0.45f,
+                o->half_extents.y * 0.22f,
+                o->half_extents.z * 0.45f
+            );
 
         default:
             return vec3(
@@ -833,6 +935,10 @@ static Vec3 object_bbox_center(const SurfaceObject *o)
             c.y -= o->half_extents.y * 0.60f;
             break;
 
+        case SURFACE_OBJECT_ROVER:
+            c.y -= o->half_extents.y * 0.72f;
+            break;
+
         default:
             break;
     }
@@ -855,6 +961,14 @@ static void draw_objects(const PlanetScene *scene)
                            vec3(o->position.x, o->position.y - o->half_extents.y, o->position.z),
                            o->yaw_deg,
                            o->model_scale);
+                break;
+            
+            case SURFACE_OBJECT_ROVER:
+                draw_rover_asset(&g_assets.rover,
+                        vec3(o->position.x, o->position.y - 0.2f, o->position.z),
+                        o->yaw_deg,
+                        15.0f,
+                        g_river_time);
                 break;
 
             case SURFACE_OBJECT_RIVER_ROCK:
@@ -1290,25 +1404,90 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
         scene->has_river = false;
 
         add_object(scene, SURFACE_OBJECT_SHIP,
-                   0.0f, 0.0f,
+                   0.0f, 5.0f,
                    10.0f, 7.0f, 10.0f,
                    true, true,
                    "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
         if(last_object(scene)){
             SurfaceObject *ship = last_object(scene);
+            float exit_x;
+            float exit_z;
+            float ship_yaw_rad;
 
             ship->yaw_deg = 180.0f;
             ship->model_scale = 0.45f;
 
+            ship_yaw_rad = ship->yaw_deg * (float)M_PI / 180.0f;
+
+            exit_x = ship->position.x + cosf(ship_yaw_rad) * 6.0f;
+            exit_z = ship->position.z + sinf(ship_yaw_rad) * 6.0f;
+
             scene->spawn_position = vec3(
-                0.0f,
-                terrain_height(scene, 0.0f, 6.0f) + scene->eye_height,
-                6.0f
+                exit_x,
+                terrain_height(scene, exit_x, exit_z) + scene->eye_height,
+                exit_z
             );
 
-            scene->spawn_yaw_deg = 180.0f;
+            scene->spawn_yaw_deg = ship->yaw_deg + 180.0f;
             scene->spawn_pitch_deg = -5.0f;
         }
+
+        scene->grounded = true;
+        scene->vertical_velocity = 0.0f;
+        return;
+    }
+
+    if(planet_index == 4){
+        strcpy(scene->planet_name, "Mars Surface");
+
+        scene->terrain_extent = 52.0f;
+        scene->eye_height = 1.75f;
+        scene->move_speed = 4.0f;
+        scene->run_multiplier = 1.6f;
+        scene->jump_velocity = 4.2f;
+        scene->gravity = 8.5f;
+
+        scene->ground_r = 0.56f;
+        scene->ground_g = 0.28f;
+        scene->ground_b = 0.18f;
+
+        scene->has_river = false;
+        scene->river_x = 0.0f;
+        scene->river_half_width = 0.0f;
+        scene->river_z_min = 0.0f;
+        scene->river_z_max = 0.0f;
+
+        add_object(scene, SURFACE_OBJECT_SHIP,
+               0.0f, 0.0f,
+               10.0f, 7.0f, 10.0f,
+               true, true,
+               "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+        if(last_object(scene)){
+            SurfaceObject *ship = last_object(scene);
+            ship->yaw_deg = 180.0f;
+            ship->model_scale = 0.45f;
+        } 
+
+        add_object(scene, SURFACE_OBJECT_ROVER,
+           7.0f, -3.0f,
+           0.6f, 0.6f, 0.6f,
+           false, true,
+           NULL);
+
+        if(last_object(scene)){
+            SurfaceObject *rover = last_object(scene);
+            rover->yaw_deg = 35.0f;
+            rover->model_scale = 5.0f;
+            rover->state = 1.0f;
+        }
+
+        scene->spawn_position = vec3(
+            0.0f,
+            terrain_height(scene, 0.0f, 8.0f) + scene->eye_height,
+            8.0f
+        );
+        scene->spawn_yaw_deg = 180.0f;
+        scene->spawn_pitch_deg = -4.0f;
 
         scene->grounded = true;
         scene->vertical_velocity = 0.0f;
@@ -2102,6 +2281,30 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
                 o->state = 1.0f;
             }
         }
+
+        if(o->type == SURFACE_OBJECT_ROVER){
+            float speed = 1.2f;
+            float min_z = -10.0f;
+            float max_z = 6.0f;
+
+            /* előre/hátra mozgás */
+            o->position.z += o->state * speed * dt;
+
+            /* fordulás a széleken */
+            if(o->position.z > max_z){
+                o->position.z = max_z;
+                o->state = -1.0f;
+                o->yaw_deg = 215.0f;
+            }
+            else if(o->position.z < min_z){
+                o->position.z = min_z;
+                o->state = 1.0f;
+                o->yaw_deg = 35.0f;
+            }
+
+            /* talaj követése */
+            o->position.y = terrain_height(scene, o->position.x, o->position.z) + o->half_extents.y;
+        }
     }
 
     for(i = 0; i < (int)(sizeof(scene->ripples) / sizeof(scene->ripples[0])); ++i){
@@ -2241,6 +2444,14 @@ void planet_scene_render(const PlanetScene *scene)
         return;
     }
 
+    if(scene->planet_index == 4){
+        glClearColor(0.62f, 0.34f, 0.22f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        setup_mars_fog();
+    }else{
+        teardown_mars_fog();
+    }
+
     if(scene->planet_index == 1){
         const GLfloat global_ambient[] = { 0.05f, 0.05f, 0.05f, 1.0f };
         const GLfloat light0_position[] = { 80.0f, 55.0f, 25.0f, 1.0f };
@@ -2319,6 +2530,7 @@ void planet_scene_render(const PlanetScene *scene)
 
         glEnable(GL_LIGHTING);
         draw_objects(scene);
+        draw_dust_particles(scene, g_cam_right, g_cam_up);
 
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_LIGHT0);
@@ -2356,6 +2568,10 @@ void planet_scene_render(const PlanetScene *scene)
     draw_river_splashes(scene);
 
     teardown_earth_surface_lighting();
+
+    if(scene->planet_index == 4){
+        teardown_mars_fog();
+    }
 }
 
 const char *planet_scene_interact(PlanetScene *scene, Vec3 camera_position)
