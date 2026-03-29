@@ -511,6 +511,57 @@ static float crater_shape(float dx, float dz, float radius, float depth)
     }
 }
 
+static float venus_volcano_shape(float x, float z,
+                                 float cx, float cz,
+                                 float radius,
+                                 float height,
+                                 float crater_radius,
+                                 float crater_depth)
+{
+    float dx = x - cx;
+    float dz = z - cz;
+    float d = sqrtf(dx * dx + dz * dz);
+
+    if(d >= radius){
+        return 0.0f;
+    }
+
+    {
+        float t = 1.0f - d / radius;
+        float cone = t * t * height;
+        float crater = 0.0f;
+
+        if(d < crater_radius){
+            float k = 1.0f - d / crater_radius;
+            crater = k * k * crater_depth;
+        }
+
+        return cone - crater;
+    }
+}
+
+static float venus_lava_mask(float x, float z)
+{
+    float crack1 = expf(-fabsf(x + 8.0f * sinf(z * 0.09f)) * 0.85f);
+    float crack2 = expf(-fabsf(z - 10.0f * sinf(x * 0.06f)) * 0.82f);
+    float crack3 = expf(-fabsf((x + z * 0.55f) - 6.0f * cosf(z * 0.08f)) * 0.88f);
+    float crack4 = expf(-fabsf((x - z * 0.70f) + 7.5f * sinf(x * 0.05f)) * 0.92f);
+    float crack5 = expf(-fabsf((z + x * 0.35f) - 5.5f * cosf(x * 0.07f)) * 0.95f);
+
+    float mask = 0.0f;
+    mask += crack1 * 1.10f;
+    mask += crack2 * 1.00f;
+    mask += crack3 * 0.95f;
+    mask += crack4 * 0.85f;
+    mask += crack5 * 0.75f;
+
+    if(mask > 1.0f){
+        mask = 1.0f;
+    }
+
+    return mask;
+}
+
 static float terrain_height(const PlanetScene *scene, float x, float z)
 {
     if(scene->planet_index == 1){
@@ -528,7 +579,25 @@ static float terrain_height(const PlanetScene *scene, float x, float z)
         return h;
     }
 
-        if(scene->planet_index == 4){
+    if(scene->planet_index == 2){
+        float h = 0.0f;
+
+        h += 0.35f * sinf(x * 0.050f);
+        h += 0.28f * cosf(z * 0.055f);
+        h += 0.14f * sinf((x + z) * 0.110f);
+        h += 0.08f * cosf((x - z) * 0.180f);
+        h += 0.04f * sinf(x * 0.75f) * cosf(z * 0.60f);
+
+        h += venus_volcano_shape(x, z, -14.0f, -10.0f, 14.0f, 4.8f, 4.0f, 1.8f);
+        h += venus_volcano_shape(x, z,  16.0f,  12.0f, 12.0f, 4.1f, 3.6f, 1.5f);
+        h += venus_volcano_shape(x, z,   4.0f, -18.0f, 10.0f, 3.3f, 2.8f, 1.2f);
+
+        h -= venus_lava_mask(x, z) * 0.65f;
+
+        return h;
+    }
+
+    if(scene->planet_index == 4){
         float h = 0.0f;
 
         h += 0.18f * sinf(x * 0.035f);
@@ -571,6 +640,17 @@ static Vec3 terrain_normal(const PlanetScene *scene, float x, float z)
     if(scene->planet_index == 1){
         const float e = 0.45f;
 
+        float hl = terrain_height(scene, x - e, z);
+        float hr = terrain_height(scene, x + e, z);
+        float hd = terrain_height(scene, x, z - e);
+        float hu = terrain_height(scene, x, z + e);
+
+        Vec3 n = vec3(hl - hr, 2.0f * e, hd - hu);
+        return vec3_norm(n);
+    }
+
+    if(scene->planet_index == 2){
+        const float e = 0.18f;
         float hl = terrain_height(scene, x - e, z);
         float hr = terrain_height(scene, x + e, z);
         float hd = terrain_height(scene, x, z - e);
@@ -665,6 +745,22 @@ static void teardown_mars_fog(void)
     glDisable(GL_FOG);
 }
 
+static void setup_venus_fog(void)
+{
+    const GLfloat fog_color[] = { 0.78f, 0.42f, 0.12f, 1.0f };
+
+    glEnable(GL_FOG);
+    glFogi(GL_FOG_MODE, GL_EXP2);
+    glFogf(GL_FOG_DENSITY, 0.025f);
+    glFogfv(GL_FOG_COLOR, fog_color);
+    glHint(GL_FOG_HINT, GL_NICEST);
+}
+
+static void teardown_venus_fog(void)
+{
+    glDisable(GL_FOG);
+}
+
 static void draw_box(Vec3 center, Vec3 half)
 {
     float x0 = center.x - half.x;
@@ -710,9 +806,9 @@ static void draw_mountain_ring(const PlanetScene *scene)
     const GLfloat mountain_specular[] = { 0.0f, 0.0f, 0.0f, 1.0f };
     const GLfloat mountain_shininess[] = { 0.0f };
 
-    if(scene->planet_index == 1 || scene->planet_index == 4){
+    if(scene->planet_index == 1 || scene->planet_index == 2 || scene->planet_index == 4){
         return;
-    }  
+    }
 
     glEnable(GL_LIGHTING);
     glDisable(GL_CULL_FACE);
@@ -806,7 +902,16 @@ static void draw_mountain_ring(const PlanetScene *scene)
 
 static void draw_terrain(const PlanetScene *scene)
 {
-    const int steps = (scene->planet_index == 1) ? 72 : 160;
+    int steps;
+
+    if(scene->planet_index == 1){
+        steps = 72;
+    }else if(scene->planet_index == 2){
+        steps = 88;
+    }else{
+        steps = 160;
+    }
+
     const float extent = scene->terrain_extent;
     const float step = (extent * 2.0f) / (float)steps;
     int iz, ix;
@@ -1343,10 +1448,172 @@ static void draw_dust_particles(const PlanetScene *scene, Vec3 camera_right, Vec
             Vec3 v2 = vec3_sub(vec3_add(p->position, right), up);
             Vec3 v3 = vec3_sub(vec3_sub(p->position, right), up);
 
-            glColor4f(0.72f, 0.68f, 0.60f, alpha); glVertex3f(v0.x, v0.y, v0.z);
-            glColor4f(0.72f, 0.68f, 0.60f, alpha); glVertex3f(v1.x, v1.y, v1.z);
-            glColor4f(0.72f, 0.68f, 0.60f, 0.0f);  glVertex3f(v2.x, v2.y, v2.z);
-            glColor4f(0.72f, 0.68f, 0.60f, 0.0f);  glVertex3f(v3.x, v3.y, v3.z);
+            if(scene->planet_index == 2){
+                glColor4f(0.92f, 0.56f, 0.18f, alpha); glVertex3f(v0.x, v0.y, v0.z);
+                glColor4f(0.92f, 0.56f, 0.18f, alpha); glVertex3f(v1.x, v1.y, v1.z);
+                glColor4f(0.92f, 0.56f, 0.18f, 0.0f);  glVertex3f(v2.x, v2.y, v2.z);
+                glColor4f(0.92f, 0.56f, 0.18f, 0.0f);  glVertex3f(v3.x, v3.y, v3.z);
+            }else{
+                glColor4f(0.72f, 0.68f, 0.60f, alpha); glVertex3f(v0.x, v0.y, v0.z);
+                glColor4f(0.72f, 0.68f, 0.60f, alpha); glVertex3f(v1.x, v1.y, v1.z);
+                glColor4f(0.72f, 0.68f, 0.60f, 0.0f);  glVertex3f(v2.x, v2.y, v2.z);
+                glColor4f(0.72f, 0.68f, 0.60f, 0.0f);  glVertex3f(v3.x, v3.y, v3.z);
+            }
+        }
+    }
+    glEnd();
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+}
+
+static void spawn_venus_particle(PlanetScene *scene)
+{
+    int i;
+
+    for(i = 0; i < (int)(sizeof(scene->dust_particles) / sizeof(scene->dust_particles[0])); ++i){
+        DustParticle *p = &scene->dust_particles[i];
+        if(!p->active){
+            float x = ((float)rand() / (float)RAND_MAX) * scene->terrain_extent * 2.0f - scene->terrain_extent;
+            float z = ((float)rand() / (float)RAND_MAX) * scene->terrain_extent * 2.0f - scene->terrain_extent;
+            float y = terrain_height(scene, x, z) + 2.0f + ((float)rand() / (float)RAND_MAX) * 5.0f;
+
+            p->active = true;
+            p->position = vec3(x, y, z);
+            p->velocity = vec3(2.6f + ((float)rand() / (float)RAND_MAX) * 1.6f,
+                               0.08f + ((float)rand() / (float)RAND_MAX) * 0.16f,
+                               -0.8f + ((float)rand() / (float)RAND_MAX) * 1.6f);
+            p->age = 0.0f;
+            p->life = 2.0f + ((float)rand() / (float)RAND_MAX) * 1.8f;
+            p->size = 0.75f + ((float)rand() / (float)RAND_MAX) * 1.15f;
+            p->alpha = 0.55f + ((float)rand() / (float)RAND_MAX) * 0.25f;
+            return;
+        }
+    }
+}
+
+static void update_venus_particles(PlanetScene *scene, float dt)
+{
+    int i;
+
+    for(i = 0; i < 4; ++i){
+        spawn_venus_particle(scene);
+    }
+
+    for(i = 0; i < (int)(sizeof(scene->dust_particles) / sizeof(scene->dust_particles[0])); ++i){
+        DustParticle *p = &scene->dust_particles[i];
+
+        if(!p->active){
+            continue;
+        }
+
+        p->age += dt;
+        if(p->age >= p->life){
+            p->active = false;
+            continue;
+        }
+
+        p->position = vec3_add(p->position, vec3_scale(p->velocity, dt));
+        p->position.y += sinf(scene->venus_cloud_time * 2.2f + p->position.x * 0.25f) * 0.03f;
+
+        if(fabsf(p->position.x) > scene->terrain_extent ||
+           fabsf(p->position.z) > scene->terrain_extent){
+            p->active = false;
+        }
+    }
+}
+
+static void draw_venus_cloud_layer(const PlanetScene *scene)
+{
+    int i;
+    const int segments = 40;
+    const float radius = scene->terrain_extent * 0.95f;
+    const float y = 55.0f;
+
+    if(scene->planet_index != 2){
+        return;
+    }
+
+    glDisable(GL_LIGHTING);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_CULL_FACE);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+
+    glBegin(GL_TRIANGLE_FAN);
+    glColor4f(0.95f, 0.70f, 0.40f, 0.40f);
+    glVertex3f(0.0f, y, 0.0f);
+
+    for(i = 0; i <= segments; ++i){
+        float a = (float)i / (float)segments * 2.0f * (float)M_PI;
+        float wave = 1.0f + 0.10f * sinf(a * 5.0f + scene->venus_cloud_time * 0.70f);
+        float x = cosf(a) * radius * wave;
+        float z = sinf(a) * radius * wave;
+        float yy = y + 0.35f * sinf(a * 4.0f + scene->venus_cloud_time * 0.55f);
+
+        glColor4f(0.92f, 0.70f, 0.35f, 0.30f);
+        glVertex3f(x, yy, z);
+    }
+    glEnd();
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+}
+
+static void draw_venus_lava_cracks(const PlanetScene *scene)
+{
+    const int steps = 90;
+    const float extent = scene->terrain_extent;
+    const float step = (extent * 2.0f) / (float)steps;
+    int iz, ix;
+
+    if(scene->planet_index != 2){
+        return;
+    }
+
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_CULL_FACE);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glDepthMask(GL_FALSE);
+
+    glBegin(GL_QUADS);
+    for(iz = 0; iz < steps; ++iz){
+        float z0 = -extent + (float)iz * step;
+        float z1 = z0 + step;
+
+        for(ix = 0; ix < steps; ++ix){
+            float x0 = -extent + (float)ix * step;
+            float x1 = x0 + step;
+
+            float cx = (x0 + x1) * 0.5f;
+            float cz = (z0 + z1) * 0.5f;
+            float mask = venus_lava_mask(cx, cz);
+
+            if(mask < 0.22f){
+                continue;
+            }
+
+            {
+                float y = terrain_height(scene, cx, cz) + 0.03f;
+                float pulse = 0.70f + 0.30f * sinf(scene->venus_cloud_time * 3.2f + cx * 0.25f + cz * 0.18f);
+                float alpha = (mask - 0.22f) * 0.50f;
+
+                if(alpha > 0.75f){
+                    alpha = 0.75f;
+                }
+
+                glColor4f(1.00f, 0.30f + 0.20f * pulse, 0.02f, alpha);
+                glVertex3f(x0, y, z0);
+                glVertex3f(x1, y, z0);
+                glVertex3f(x1, y, z1);
+                glVertex3f(x0, y, z1);
+            }
         }
     }
     glEnd();
@@ -1428,6 +1695,57 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
                 exit_z
             );
 
+            scene->spawn_yaw_deg = ship->yaw_deg + 180.0f;
+            scene->spawn_pitch_deg = -5.0f;
+        }
+
+        scene->grounded = true;
+        scene->vertical_velocity = 0.0f;
+        return;
+    }
+
+    if(planet_index == 2){
+        strcpy(scene->planet_name, "Venus Surface");
+
+        scene->terrain_extent = 58.0f;
+        scene->eye_height = 1.75f;
+        scene->move_speed = 3.4f;
+        scene->run_multiplier = 1.35f;
+        scene->jump_velocity = 3.2f;
+        scene->gravity = 10.5f;
+
+        scene->ground_r = 0.48f;
+        scene->ground_g = 0.24f;
+        scene->ground_b = 0.10f;
+
+        scene->has_river = false;
+        scene->venus_heat = 0.0f;
+        scene->venus_heat_timer = 0.0f;
+        scene->venus_cloud_time = 0.0f;
+
+        add_object(scene, SURFACE_OBJECT_SHIP,
+                   0.0f, 8.0f,
+                   10.0f, 7.0f, 10.0f,
+                   true, true,
+                   "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+        if(last_object(scene)){
+            SurfaceObject *ship = last_object(scene);
+            float exit_x;
+            float exit_z;
+            float ship_yaw_rad;
+
+            ship->yaw_deg = 180.0f;
+            ship->model_scale = 0.45f;
+
+            ship_yaw_rad = ship->yaw_deg * (float)M_PI / 180.0f;
+            exit_x = ship->position.x + cosf(ship_yaw_rad) * 6.0f;
+            exit_z = ship->position.z + sinf(ship_yaw_rad) * 6.0f;
+
+            scene->spawn_position = vec3(
+                exit_x,
+                terrain_height(scene, exit_x, exit_z) + scene->eye_height,
+                exit_z
+            );
             scene->spawn_yaw_deg = ship->yaw_deg + 180.0f;
             scene->spawn_pitch_deg = -5.0f;
         }
@@ -2352,6 +2670,24 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
         }
     }
 
+    if(scene->planet_index == 2){
+        scene->venus_cloud_time += dt;
+        update_venus_particles(scene, dt);
+
+        scene->venus_heat += dt * 0.22f;
+        if(scene->venus_heat > 1.0f){
+            scene->venus_heat = 1.0f;
+        }
+
+        scene->venus_heat_timer += dt;
+        if(scene->venus_heat_timer >= 2.5f){
+            scene->venus_heat_timer = 0.0f;
+            snprintf(scene->interaction_message,
+                 sizeof(scene->interaction_message),
+                 "FIGYELEM: szelsoseges ho es mergezo legkor a Vénuszon!");
+        }
+    }
+
     update_dust_particles(scene, dt);
     g_cam_right = camera->right;
     g_cam_up    = camera->up;
@@ -2444,11 +2780,16 @@ void planet_scene_render(const PlanetScene *scene)
         return;
     }
 
-    if(scene->planet_index == 4){
+    if(scene->planet_index == 2){
+        glClearColor(0.78f, 0.42f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        setup_venus_fog();
+    }else if(scene->planet_index == 4){
         glClearColor(0.62f, 0.34f, 0.22f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         setup_mars_fog();
     }else{
+        teardown_venus_fog();
         teardown_mars_fog();
     }
 
@@ -2561,15 +2902,27 @@ void planet_scene_render(const PlanetScene *scene)
     }
 
     draw_terrain(scene);
+
+    if(scene->planet_index == 2){
+        draw_venus_lava_cracks(scene);
+    }
+
     draw_mountain_ring(scene);
     draw_objects(scene);
     draw_thrown_stones(scene);
     draw_river(scene);
     draw_river_splashes(scene);
 
+    if(scene->planet_index == 2){
+        draw_venus_cloud_layer(scene);
+    }
+
+    draw_dust_particles(scene, g_cam_right, g_cam_up);
     teardown_earth_surface_lighting();
 
-    if(scene->planet_index == 4){
+    if(scene->planet_index == 2){
+        teardown_venus_fog();
+    }else if(scene->planet_index == 4){
         teardown_mars_fog();
     }
 }
