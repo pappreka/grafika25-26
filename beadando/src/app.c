@@ -324,6 +324,14 @@ static void handle_input_and_camera(App *app, float dt){
 
         camera_update_vectors(&app->camera);
         planet_scene_update(&app->planet_scene, &app->camera, &app->input, dt);
+
+        if(app->planet_scene.planet_index == 2 &&
+            app->planet_scene.venus_heat_timer <= 0.05f){
+            ui_set_status(&app->ui,
+                      "FIGYELEM: szelsoseges ho es mergezo legkor!",
+                      1.5f);
+        }
+
         handle_surface_interaction(app);
         return;
     }

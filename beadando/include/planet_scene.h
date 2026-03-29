@@ -104,6 +104,11 @@ typedef struct PlanetScene{
 
     DustParticle dust_particles[48];
 
+    float venus_heat;
+    float venus_heat_timer;
+    float venus_cloud_time;
+    //float venus_particle_timer;
+
     char interaction_message[128];
 } PlanetScene;
 
