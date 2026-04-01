@@ -101,6 +101,40 @@ static void draw_text(int x, int y, const char *text, int scale){
     }
 }
 
+static int text_block_width(const char *text, int scale){
+    int max_chars = 0;
+    int line_chars = 0;
+
+    for(size_t i = 0; text[i] != '\0'; ++i){
+        if(text[i] == '\n'){
+            if(line_chars > max_chars){
+                max_chars = line_chars;
+            }
+            line_chars = 0;
+        }else{
+            ++line_chars;
+        }
+    }
+
+    if(line_chars > max_chars){
+        max_chars = line_chars;
+    }
+
+    return max_chars * 8 * scale;
+}
+
+static int text_block_height(const char *text, int scale){
+    int lines = 1;
+
+    for(size_t i = 0; text[i] != '\0'; ++i){
+        if(text[i] == '\n'){
+            ++lines;
+        }
+    }
+
+    return lines * 10 * scale;
+}
+
 void ui_init(UI *ui){
     ui->show_help = true;
     ui->status_text[0] = '\0';
@@ -137,21 +171,7 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
     ui_begin_2d(screen_w, screen_h);
 
     if(ui->show_help){
-        int panel_x = 16;
-        int panel_y = 16;
-        int panel_w = 620;
-        int panel_h = 220;
-
-        glColor4f(0.0f, 0.0f, 0.0f, 0.65f);
-        glBegin(GL_QUADS);
-        glVertex2i(panel_x, panel_y);
-        glVertex2i(panel_x + panel_w, panel_y);
-        glVertex2i(panel_x + panel_w, panel_y + panel_h);
-        glVertex2i(panel_x, panel_y + panel_h);
-        glEnd();
-
-        glColor3f(0.9f, 0.9f, 0.95f);
-        draw_text(panel_x + 12, panel_y + 12,
+        const char *help_text =
             "Solar System Explorer\n"
             "\n"
             "Controls:\n"
@@ -161,21 +181,63 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
             "  W/A/S/D: move on surface after landing\n"
             "  E: interact with nearby object\n"
             "  Left click: ship / throw stone on Earth\n"
+            "  Up / Down: adjust lights on Earth\n"
             "  Backspace: return to overview\n"
             "  F1: toggle help\n"
             "  Esc: quit\n"
             "\n"
-            "Gas giants cannot be landed on.",
-            2);
+            "Gas giants cannot be landed on.";
+
+        int text_scale = 2;
+        int padding_x = 16;
+        int padding_y = 12;
+
+        int text_w = text_block_width(help_text, text_scale);
+        int text_h = text_block_height(help_text, text_scale);
+
+        int panel_w = text_w + padding_x * 2;
+        int panel_h = text_h + padding_y * 2;
+
+        int panel_x = 16;
+        int panel_y = 16;
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        glColor4f(0.25f, 0.25f, 0.28f, 0.55f);
+        glBegin(GL_QUADS);
+        glVertex2i(panel_x, panel_y);
+        glVertex2i(panel_x + panel_w, panel_y);
+        glVertex2i(panel_x + panel_w, panel_y + panel_h);
+        glVertex2i(panel_x, panel_y + panel_h);
+        glEnd();
+
+        glColor3f(0.9f, 0.9f, 0.95f);
+        draw_text(panel_x + padding_x, panel_y + padding_y, help_text, text_scale);
     }
 
     if(ui->status_timer > 0.0f && ui->status_text[0] != '\0'){
-        int panel_w = 560;
-        int panel_h = 42;
+        int text_scale = 2;
+
+        int text_w = (int)strlen(ui->status_text) * 8 * text_scale;
+        int text_h = 8 * text_scale;
+
+        int padding_x = 20;
+        int padding_y = 10;
+
+        int panel_w = text_w + padding_x * 2;
+        int panel_h = text_h + padding_y * 2;
+
         int panel_x = (screen_w - panel_w) / 2;
         int panel_y = screen_h - panel_h - 24;
 
-        glColor4f(0.0f, 0.0f, 0.0f, 0.78f);
+        int text_x = panel_x + padding_x;
+        int text_y = panel_y + padding_y;
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        glColor4f(0.25f, 0.25f, 0.28f, 0.55f);
         glBegin(GL_QUADS);
         glVertex2i(panel_x, panel_y);
         glVertex2i(panel_x + panel_w, panel_y);
@@ -184,7 +246,7 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
         glEnd();
 
         glColor3f(1.0f, 0.85f, 0.30f);
-        draw_text(panel_x + 14, panel_y + 10, ui->status_text, 2);
+        draw_text(text_x, text_y, ui->status_text, text_scale);
     }
 
     ui_end_2d();
