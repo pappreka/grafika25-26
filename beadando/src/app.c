@@ -273,7 +273,7 @@ static void handle_surface_interaction(App *app){
         if(msg){
             ui_set_status(&app->ui, msg, 3.0f);
         }else{
-            ui_set_status(&app->ui, "Nincs kozelben interaktiv objektum.", 2.0f);
+            ui_set_status(&app->ui, "There is no interactive object nearby", 2.0f);
         }
     }
 
@@ -328,7 +328,7 @@ static void handle_input_and_camera(App *app, float dt){
         if(app->planet_scene.planet_index == 2 &&
             app->planet_scene.venus_heat_timer <= 0.05f){
             ui_set_status(&app->ui,
-                      "FIGYELEM: szelsoseges ho es mergezo legkor!",
+                      "WARNING: Extreme heat and a toxic atmosphere!",
                       1.5f);
         }
 

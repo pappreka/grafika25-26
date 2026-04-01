@@ -1674,7 +1674,7 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
                    0.0f, 5.0f,
                    10.0f, 7.0f, 10.0f,
                    true, true,
-                   "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+                   "Spaceship: click or press E to return.");
         if(last_object(scene)){
             SurfaceObject *ship = last_object(scene);
             float exit_x;
@@ -1727,7 +1727,7 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
                    0.0f, 8.0f,
                    10.0f, 7.0f, 10.0f,
                    true, true,
-                   "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+                   "Spaceship: click or press E to return.");
         if(last_object(scene)){
             SurfaceObject *ship = last_object(scene);
             float exit_x;
@@ -1779,7 +1779,7 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
                0.0f, 0.0f,
                10.0f, 7.0f, 10.0f,
                true, true,
-               "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+               "Spaceship: click or press E to return.");
         if(last_object(scene)){
             SurfaceObject *ship = last_object(scene);
             ship->yaw_deg = 180.0f;
@@ -1855,7 +1855,7 @@ void planet_scene_build(PlanetScene *scene, const Planet *planet, int planet_ind
            -13.5f, 12.0f,
            10.0f, 7.0f, 10.0f,
            true, true,
-           "Urhajo: kattints ra vagy nyomj E-t a visszatereshez.");
+           "Spaceship: click or press E to return.");
     if(last_object(scene)){
         SurfaceObject *ship = last_object(scene);
         float exit_x;
@@ -2684,7 +2684,7 @@ void planet_scene_update(PlanetScene *scene, Camera *camera, const Input *input,
             scene->venus_heat_timer = 0.0f;
             snprintf(scene->interaction_message,
                  sizeof(scene->interaction_message),
-                 "FIGYELEM: szelsoseges ho es mergezo legkor a Vénuszon!");
+                 "WARNING: Extreme heat and a toxic atmosphere on Venus!");
         }
     }
 
@@ -2948,7 +2948,7 @@ const char *planet_scene_interact(PlanetScene *scene, Vec3 camera_position)
         scene->exit_requested = true;
         snprintf(scene->interaction_message,
                  sizeof(scene->interaction_message),
-                 "Az urhajo ajtaja kinyilt. Visszatersz az attekinto nezetbe.");
+                 "The spaceship door opened. Returning to the overview.");
         return scene->interaction_message;
     }
 
@@ -2959,14 +2959,14 @@ const char *planet_scene_interact(PlanetScene *scene, Vec3 camera_position)
         }
         snprintf(scene->interaction_message,
                  sizeof(scene->interaction_message),
-                 "Felvettel nehany kavicsot. Dobhato kovek: %d",
+                 "You picked up some stones. Throwable stones: %d",
                  scene->stones_available);
         return scene->interaction_message;
     }
 
     snprintf(scene->interaction_message,
              sizeof(scene->interaction_message),
-             "Nincs kulon interakcio ehhez az objektumhoz.");
+             "There is no special interaction for this object.");
     return scene->interaction_message;
 }
 
@@ -2989,7 +2989,7 @@ const char *planet_scene_handle_click(PlanetScene *scene, Vec3 camera_position, 
 
         snprintf(scene->interaction_message,
                  sizeof(scene->interaction_message),
-                 "Az urhajora kattintottal, visszatersz az attekinto nezetbe.");
+                 "You clicked on the spaceship. Returning to the overview.");
 
         return scene->interaction_message;
     }
@@ -3009,7 +3009,7 @@ const char *planet_scene_throw_stone(PlanetScene *scene, Vec3 camera_position, V
     if(scene->stones_available <= 0){
         snprintf(scene->interaction_message,
                  sizeof(scene->interaction_message),
-                 "Nincs nalad kavics.");
+                 "You do not have any stones.");
         return scene->interaction_message;
     }
 
@@ -3017,7 +3017,7 @@ const char *planet_scene_throw_stone(PlanetScene *scene, Vec3 camera_position, V
     if(!s){
         snprintf(scene->interaction_message,
                  sizeof(scene->interaction_message),
-                 "Most tul sok ko van a levegoben.");
+                 "There are too many stones in the air right now.");
         return scene->interaction_message;
     }
 
@@ -3036,7 +3036,7 @@ const char *planet_scene_throw_stone(PlanetScene *scene, Vec3 camera_position, V
 
     snprintf(scene->interaction_message,
              sizeof(scene->interaction_message),
-             "Kavics eldobva. Maradt: %d",
+             "Stone thrown. Remaining: %d",
              scene->stones_available);
 
     return scene->interaction_message;
