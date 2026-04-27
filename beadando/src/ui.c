@@ -8,6 +8,7 @@
 
 #include <GL/gl.h>
 
+// 8x8 pixeles bitmap font az UI szövegekhez
 static const unsigned char font8x8_basic[96][8] = {
     {0,0,0,0,0,0,0,0},{0x18,0x18,0x18,0x18,0x18,0,0x18,0},{0x36,0x36,0x24,0,0,0,0,0},{0x36,0x36,0x7F,0x36,0x7F,0x36,0x36,0},
     {0x18,0x3E,0x58,0x3C,0x1A,0x7C,0x18,0},{0x62,0x66,0x0C,0x18,0x30,0x66,0x46,0},{0x38,0x6C,0x38,0x76,0xDC,0xCC,0x76,0},{0x18,0x18,0x30,0,0,0,0,0},
@@ -35,29 +36,37 @@ static const unsigned char font8x8_basic[96][8] = {
     {0x18,0x18,0x18,0,0x18,0x18,0x18,0},{0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0},{0x76,0xDC,0,0,0,0,0,0},{0,0,0,0,0,0,0,0}
 };
 
+// 2D rajzolási mód bekapcsolása az UI-hoz
 static void ui_begin_2d(int w, int h){
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
     glOrtho(0.0, (double)w, (double)h, 0.0, -1.0, 1.0);
+
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
+
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 }
 
+// 2D mód kikapcsolása és állapot visszaállítása
 static void ui_end_2d(void){
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
+
     glMatrixMode(GL_MODELVIEW);
     glPopMatrix();
+
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
 }
 
+// Egy karakter kirajzolása a bitmap fontból
 static void draw_char(int x, int y, char c, int scale){
     unsigned char uc = (unsigned char)c;
+
     if(uc < 32 || uc > 127){
         uc = (unsigned char)'?';
     }
@@ -66,6 +75,7 @@ static void draw_char(int x, int y, char c, int scale){
 
     for(int row = 0; row < 8; row++){
         unsigned char bits = glyph[row];
+
         for(int col = 0; col < 8; col++){
             int on = (bits & (1u << (7 - col))) != 0;
             if(!on){
@@ -85,22 +95,26 @@ static void draw_char(int x, int y, char c, int scale){
     }
 }
 
+// Szöveg kirajzolása több karakterrel, sortörés támogatással
 static void draw_text(int x, int y, const char *text, int scale){
     int cx = x;
     int cy = y;
 
     for(size_t i = 0; text[i] != '\0'; i++){
         char c = text[i];
+
         if(c == '\n'){
             cy += 10 * scale;
             cx = x;
             continue;
         }
+
         draw_char(cx, cy, c, scale);
         cx += 8 * scale;
     }
 }
 
+// Szövegblokk szélességének kiszámítása
 static int text_block_width(const char *text, int scale){
     int max_chars = 0;
     int line_chars = 0;
@@ -123,6 +137,7 @@ static int text_block_width(const char *text, int scale){
     return max_chars * 8 * scale;
 }
 
+// Szövegblokk magasságának kiszámítása
 static int text_block_height(const char *text, int scale){
     int lines = 1;
 
@@ -135,16 +150,19 @@ static int text_block_height(const char *text, int scale){
     return lines * 10 * scale;
 }
 
+// UI alapállapot beállítása
 void ui_init(UI *ui){
     ui->show_help = true;
     ui->status_text[0] = '\0';
     ui->status_timer = 0.0f;
 }
 
+// Súgó ki- és bekapcsolása
 void ui_toggle_help(UI *ui){
     ui->show_help = !ui->show_help;
 }
 
+// Állapotüzenet beállítása
 void ui_set_status(UI *ui, const char *text, float seconds){
     if(text == NULL){
         ui->status_text[0] = '\0';
@@ -157,9 +175,11 @@ void ui_set_status(UI *ui, const char *text, float seconds){
     ui->status_timer = seconds;
 }
 
+// UI időzítések frissítése
 void ui_update(UI *ui, float dt){
     if(ui->status_timer > 0.0f){
         ui->status_timer -= dt;
+
         if(ui->status_timer <= 0.0f){
             ui->status_timer = 0.0f;
             ui->status_text[0] = '\0';
@@ -167,9 +187,11 @@ void ui_update(UI *ui, float dt){
     }
 }
 
+// Súgópanel és állapotüzenet kirajzolása
 void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
     ui_begin_2d(screen_w, screen_h);
 
+    // Súgópanel
     if(ui->show_help){
         const char *help_text =
             "Solar System Explorer\n"
@@ -204,6 +226,7 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        // Háttérpanel
         glColor4f(0.25f, 0.25f, 0.28f, 0.55f);
         glBegin(GL_QUADS);
         glVertex2i(panel_x, panel_y);
@@ -212,10 +235,12 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
         glVertex2i(panel_x, panel_y + panel_h);
         glEnd();
 
+        // Súgó szöveg
         glColor3f(0.9f, 0.9f, 0.95f);
         draw_text(panel_x + padding_x, panel_y + padding_y, help_text, text_scale);
     }
 
+    // Alsó állapotüzenet
     if(ui->status_timer > 0.0f && ui->status_text[0] != '\0'){
         int text_scale = 2;
 
@@ -237,6 +262,7 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        // Háttérpanel
         glColor4f(0.25f, 0.25f, 0.28f, 0.55f);
         glBegin(GL_QUADS);
         glVertex2i(panel_x, panel_y);
@@ -245,6 +271,7 @@ void ui_render_help_overlay(const UI *ui, int screen_w, int screen_h){
         glVertex2i(panel_x, panel_y + panel_h);
         glEnd();
 
+        // Állapotüzenet szöveg
         glColor3f(1.0f, 0.85f, 0.30f);
         draw_text(text_x, text_y, ui->status_text, text_scale);
     }

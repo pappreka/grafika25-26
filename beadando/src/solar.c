@@ -1,6 +1,7 @@
 #include "solar.h"
 #include <stdio.h>
 
+// Textúra betöltése, hiba esetén egyszínű helyettesítő textúra készítése
 static Texture2D load_or_fallback(const char *path){
     Texture2D t;
     if(!texture_load(&t, path)){
@@ -10,6 +11,7 @@ static Texture2D load_or_fallback(const char *path){
     return t;
 }
 
+// Gyűrűtextúra betöltése, hiba esetén helyettesítő textúra használata
 static Texture2D load_ring_or_fallback(const char *path){
     Texture2D t;
     if(!texture_load(&t, path)){
@@ -19,6 +21,7 @@ static Texture2D load_ring_or_fallback(const char *path){
     return t;
 }
 
+// Az aktuálisan kijelölt bolygó indexe
 static int current_selected_planet_index(const SolarSystem *s){
     if(s->selected_order_pos < 0 || s->selected_order_pos >= s->planet_count){
         return 0;
@@ -26,6 +29,7 @@ static int current_selected_planet_index(const SolarSystem *s){
     return s->selection_order[s->selected_order_pos];
 }
 
+// A kijelölt bolygót előrébb hozzuk, hogy kiemelve jelenjen meg
 static void apply_selection_positions(SolarSystem *s){
     int selected_index = current_selected_planet_index(s);
 
@@ -38,12 +42,14 @@ static void apply_selection_positions(SolarSystem *s){
     }
 }
 
+// A Naprendszer inicializálása
 bool solar_init(SolarSystem *s, Mesh *shared_sphere){
     s->shared_sphere = shared_sphere;
     s->planet_count = 9;
     s->selected_forward_offset = 2.0f;
 
-    /* Mars -> Earth -> Venus -> Mercury -> Sun -> Jupiter -> Saturn -> Uranus -> Neptune */
+    // A bolygók kiválasztási sorrendje
+    //Mars -> Earth -> Venus -> Mercury -> Sun -> Jupiter -> Saturn -> Uranus -> Neptune
     s->selection_order[0] = 4;
     s->selection_order[1] = 3;
     s->selection_order[2] = 2;
@@ -56,6 +62,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
 
     s->selected_order_pos = 4;
 
+    // Nap
     s->planets[0] = (Planet){
         .name = "Sun",
         .radius = 2.2f,
@@ -71,6 +78,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = false
     };
 
+    // Merkúr
     s->planets[1] = (Planet){
         .name = "Mercury",
         .radius = 0.30f,
@@ -86,6 +94,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = true
     };
 
+    // Vénusz
     s->planets[2] = (Planet){
         .name = "Venus",
         .radius = 0.55f,
@@ -101,6 +110,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = true
     };
 
+    // Föld
     s->planets[3] = (Planet){
         .name = "Earth",
         .radius = 0.60f,
@@ -116,6 +126,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = true
     };
 
+    // Mars
     s->planets[4] = (Planet){
         .name = "Mars",
         .radius = 0.45f,
@@ -131,6 +142,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = true
     };
 
+    // Jupiter
     s->planets[5] = (Planet){
         .name = "Jupiter",
         .radius = 1.25f,
@@ -146,6 +158,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = false
     };
 
+    // Szaturnusz
     s->planets[6] = (Planet){
         .name = "Saturn",
         .radius = 1.10f,
@@ -165,6 +178,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = false
     };
 
+    // Uránusz
     s->planets[7] = (Planet){
         .name = "Uranus",
         .radius = 0.85f,
@@ -180,6 +194,7 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
         .landable = false
     };
 
+    // Neptunusz
     s->planets[8] = (Planet){
         .name = "Neptune",
         .radius = 0.83f,
@@ -199,18 +214,23 @@ bool solar_init(SolarSystem *s, Mesh *shared_sphere){
     return true;
 }
 
+// A Naprendszer textúráinak felszabadítása
 void solar_shutdown(SolarSystem *s){
     for(int i = 0; i < s->planet_count; i++){
         texture_free(&s->planets[i].texture);
+
         if(s->planets[i].has_ring){
             texture_free(&s->planets[i].ring_texture);
         }
     }
 }
 
+// Bolygók frissítése
 void solar_update(SolarSystem *s, float dt){
     for(int i = 0; i < s->planet_count; i++){
         Planet *p = &s->planets[i];
+
+        // Forgás frissítése
         p->rotation_angle += p->rotation_speed * dt;
 
         if(p->rotation_angle > 360.0f){
@@ -221,6 +241,7 @@ void solar_update(SolarSystem *s, float dt){
     apply_selection_positions(s);
 }
 
+// Bolygó lekérése index alapján
 Planet* solar_get(SolarSystem *s, int index){
     if(index < 0 || index >= s->planet_count){
         return NULL;
@@ -228,26 +249,34 @@ Planet* solar_get(SolarSystem *s, int index){
     return &s->planets[index];
 }
 
+// Bolygók száma
 int solar_count(const SolarSystem *s){
     return s->planet_count;
 }
 
+// Következő bolygó kiválasztása
 void solar_select_next(SolarSystem *s){
     s->selected_order_pos++;
+
     if(s->selected_order_pos >= s->planet_count){
         s->selected_order_pos = 0;
     }
+
     apply_selection_positions(s);
 }
 
+// Előző bolygó kiválasztása
 void solar_select_prev(SolarSystem *s){
     s->selected_order_pos--;
+
     if(s->selected_order_pos < 0){
         s->selected_order_pos = s->planet_count - 1;
     }
+
     apply_selection_positions(s);
 }
 
+// Jelenleg kiválasztott bolygó indexe
 int solar_selected_index(const SolarSystem *s){
     return current_selected_planet_index(s);
 }

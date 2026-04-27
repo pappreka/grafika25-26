@@ -12,14 +12,17 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// SDL tick érték átváltása másodpercre
 static float seconds_from_ticks(unsigned int ticks){
     return (float)ticks / 1000.0f;
 }
 
+// Egyszerű lineáris interpoláció
 static float lerpf(float a, float b, float t){
     return a + (b - a) * t;
 }
 
+// Két 3D pont/vetor közötti lineáris interpoláció
 static Vec3 vec3_lerp(Vec3 a, Vec3 b, float t){
     return vec3(
         lerpf(a.x, b.x, t),
@@ -28,6 +31,7 @@ static Vec3 vec3_lerp(Vec3 a, Vec3 b, float t){
     );
 }
 
+// A kamera irányát úgy állítja be, hogy a target pontra nézzen
 static void set_camera_look_at(Camera *cam, Vec3 target){
     Vec3 dir = vec3_norm(vec3_sub(target, cam->position));
 
@@ -40,6 +44,7 @@ static void set_camera_look_at(Camera *cam, Vec3 target){
     camera_update_vectors(cam);
 }
 
+// Az alap, fix kamera beállítása az űrbeli áttekintő nézethez
 static void setup_fixed_camera(App *app){
     camera_init(&app->camera);
 
@@ -52,6 +57,7 @@ static void setup_fixed_camera(App *app){
     camera_update_vectors(&app->camera);
 }
 
+// Visszaállás a fő, űrbeli nézetre
 static void reset_to_overview(App *app){
     app->landing_in_progress = false;
     app->surface_mode = false;
@@ -64,6 +70,7 @@ static void reset_to_overview(App *app){
     camera_update_vectors(&app->camera);
 }
 
+// Egy textúrázott mesh kirajzolása
 static void draw_mesh_textured(const Mesh *m, unsigned int tex_id){
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, (GLuint)tex_id);
@@ -84,7 +91,9 @@ static void draw_mesh_textured(const Mesh *m, unsigned int tex_id){
     glDisable(GL_TEXTURE_2D);
 }
 
+// A csillagos égbolt kirajzolása egy nagy gömbbel
 static void draw_sky_sphere(const App *app){
+    // Felszíni nézetben nincs égbolt gömb
     if(app->surface_mode){
         return;
     }
@@ -95,12 +104,14 @@ static void draw_sky_sphere(const App *app){
 
     glPushMatrix();
 
+    // Az égbolt gömb mindig a kamera körül van
     glTranslatef(app->camera.position.x,
                  app->camera.position.y,
                  app->camera.position.z);
 
     glScalef(5000.0f, 5000.0f, 5000.0f);
 
+    // Égbolt kirajzolásához néhány állapot átállítása
     glDisable(GL_CULL_FACE);
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
@@ -122,6 +133,7 @@ static void draw_sky_sphere(const App *app){
     glBindTexture(GL_TEXTURE_2D, 0);
     glDisable(GL_TEXTURE_2D);
 
+    // OpenGL állapot visszaállítása
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -129,6 +141,7 @@ static void draw_sky_sphere(const App *app){
     glPopMatrix();
 }
 
+// Egy bolygó gyűrűjének kirajzolása
 static void draw_planet_ring(const Planet *p){
     if(!p->has_ring || p->ring_texture.id == 0){
         return;
@@ -146,6 +159,7 @@ static void draw_planet_ring(const Planet *p){
     glBindTexture(GL_TEXTURE_2D, (GLuint)p->ring_texture.id);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
+    // Átlátszó textúrájú gyűrűk miatt blending kell
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_ALPHA_TEST);
@@ -180,6 +194,7 @@ static void draw_planet_ring(const Planet *p){
     glPopMatrix();
 }
 
+// Leszállás előkészítése a kijelölt bolygóra
 static void start_landing(App *app){
     int selected = solar_selected_index(&app->solar);
     Planet *p = solar_get(&app->solar, selected);
@@ -188,6 +203,7 @@ static void start_landing(App *app){
         return;
     }
 
+    // Ha nem leszállható bolygó, csak üzenetet írunk ki
     if(!p->landable){
         ui_set_status(&app->ui, "You cannot land on this planet", 3.0f);
         return;
@@ -198,10 +214,12 @@ static void start_landing(App *app){
         Vec3 normal = vec3_norm(to_camera);
         float hover = p->radius * 0.15f;
 
+        // Biztonsági alapértelmezett normál
         if(vec3_len(normal) < 0.0001f){
             normal = vec3(0.0f, 0.0f, 1.0f);
         }
 
+        // Minimum lebegési magasság
         if(hover < 0.25f){
             hover = 0.25f;
         }
@@ -214,6 +232,7 @@ static void start_landing(App *app){
         );
     }
 
+    // Leszállási animáció indítása
     app->landing_t = 0.0f;
     app->landing_duration = 1.35f;
     app->landing_in_progress = true;
@@ -221,6 +240,7 @@ static void start_landing(App *app){
     app->landed_planet_index = selected;
 }
 
+// Leszállási animáció frissítése
 static void update_landing(App *app, float dt){
     Planet *p;
 
@@ -241,7 +261,7 @@ static void update_landing(App *app, float dt){
 
     {
         float t = app->landing_t;
-        float s = t * t * (3.0f - 2.0f * t);
+        float s = t * t * (3.0f - 2.0f * t); // simított átmenet
 
         app->camera.position = vec3_lerp(
             app->landing_start_position,
@@ -250,8 +270,10 @@ static void update_landing(App *app, float dt){
         );
     }
 
+    // A kamera végig a bolygó felé néz
     set_camera_look_at(&app->camera, p->position);
 
+    // Amikor a leszállás kész, belépünk a felszíni jelenetbe
     if(app->landing_t >= 1.0f){
         planet_scene_build(&app->planet_scene, p, app->landed_planet_index);
 
@@ -265,9 +287,11 @@ static void update_landing(App *app, float dt){
     }
 }
 
+// Felszíni interakciók kezelése
 static void handle_surface_interaction(App *app){
     const char *msg = NULL;
 
+    // E billentyűs interakció
     if(input_key_pressed(&app->input, SDL_SCANCODE_E)){
         msg = planet_scene_interact(&app->planet_scene, app->camera.position);
         if(msg){
@@ -277,6 +301,7 @@ static void handle_surface_interaction(App *app){
         }
     }
 
+    // Bal egérgombos interakció vagy kődobás
     if(input_mouse_pressed(&app->input, SDL_BUTTON_LEFT)){
         msg = planet_scene_handle_click(&app->planet_scene, app->camera.position, app->camera.front);
         if(!msg && app->landed_planet_index == 3){
@@ -287,11 +312,13 @@ static void handle_surface_interaction(App *app){
         }
     }
 
+    // Kilépés a felszínről
     if(planet_scene_should_exit(&app->planet_scene)){
         reset_to_overview(app);
     }
 }
 
+// Input, kamera és játékmódok kezelése
 static void handle_input_and_camera(App *app, float dt){
     Input *in = &app->input;
 
@@ -307,14 +334,17 @@ static void handle_input_and_camera(App *app, float dt){
         reset_to_overview(app);
     }
 
+    // Ha leszállás folyamatban van, csak azt frissítjük
     if(app->landing_in_progress){
         update_landing(app, dt);
         return;
     }
 
+    // Felszíni mód inputja
     if(app->surface_mode){
         camera_add_mouse(&app->camera, in->mouse_dx, in->mouse_dy);
 
+        // Felszíni nézetben nagyobb függőleges mozgás engedett
         if(app->camera.pitch_deg > 80.0f){
             app->camera.pitch_deg = 80.0f;
         }
@@ -325,6 +355,7 @@ static void handle_input_and_camera(App *app, float dt){
         camera_update_vectors(&app->camera);
         planet_scene_update(&app->planet_scene, &app->camera, &app->input, dt);
 
+        // Vénusz speciális figyelmeztetés
         if(app->planet_scene.planet_index == 2 &&
             app->planet_scene.venus_heat_timer <= 0.05f){
             ui_set_status(&app->ui,
@@ -336,6 +367,7 @@ static void handle_input_and_camera(App *app, float dt){
         return;
     }
 
+    // Űrbeli nézetben bolygóválasztás
     if(input_key_pressed(in, SDL_SCANCODE_LEFT)){
         solar_select_next(&app->solar);
     }
@@ -344,13 +376,16 @@ static void handle_input_and_camera(App *app, float dt){
         solar_select_prev(&app->solar);
     }
 
+    // Enterrel leszállás indítása
     if(input_key_pressed(in, SDL_SCANCODE_RETURN) ||
        input_key_pressed(in, SDL_SCANCODE_KP_ENTER)){
         start_landing(app);
     }
 
+    // Egérrel kis nézelődés az áttekintő nézetben
     camera_add_mouse(&app->camera, in->mouse_dx, in->mouse_dy);
 
+    // Itt kisebb pitch engedett
     if(app->camera.pitch_deg > 35.0f){
         app->camera.pitch_deg = 35.0f;
     }
@@ -362,7 +397,9 @@ static void handle_input_and_camera(App *app, float dt){
     app->camera.position = app->fixed_camera_position;
 }
 
+// Az alkalmazás inicializálása
 bool app_init(App *app, const char *title, int w, int h){
+    // Alapértékek beállítása
     app->window = NULL;
     app->gl_ctx = NULL;
     app->running = false;
@@ -387,16 +424,19 @@ bool app_init(App *app, const char *title, int w, int h){
 
     planet_scene_init(&app->planet_scene);
 
+    // SDL inicializálás
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return false;
     }
 
+    // OpenGL kontextus attribútumok
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
+    // Ablak létrehozása
     app->window = SDL_CreateWindow(
         title,
         SDL_WINDOWPOS_CENTERED,
@@ -411,6 +451,7 @@ bool app_init(App *app, const char *title, int w, int h){
         return false;
     }
 
+    // OpenGL kontextus létrehozása
     app->gl_ctx = SDL_GL_CreateContext(app->window);
     if(!app->gl_ctx){
         fprintf(stderr, "SDL_GL_CreateContext failed: %s\n", SDL_GetError());
@@ -425,6 +466,7 @@ bool app_init(App *app, const char *title, int w, int h){
     setup_fixed_camera(app);
     ui_init(&app->ui);
 
+    // Input tömbök nullázása
     for(int i = 0; i < SDL_NUM_SCANCODES; i++){
         app->input.keys[i] = false;
         app->input.keys_pressed[i] = false;
@@ -434,6 +476,7 @@ bool app_init(App *app, const char *title, int w, int h){
         app->input.mouse_buttons_pressed[i] = false;
     }
 
+    // Renderer inicializálása
     if(!renderer_init(&app->renderer, w, h)){
         fprintf(stderr, "renderer_init failed\n");
         SDL_GL_DeleteContext(app->gl_ctx);
@@ -445,6 +488,7 @@ bool app_init(App *app, const char *title, int w, int h){
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    // Közös gömb mesh betöltése
     if(!mesh_load_obj(&app->sphere_mesh, "assets/models/sphere.obj")){
         fprintf(stderr, "Failed to load sphere.obj\n");
         SDL_GL_DeleteContext(app->gl_ctx);
@@ -453,11 +497,13 @@ bool app_init(App *app, const char *title, int w, int h){
         return false;
     }
 
+    // Háttér textúra betöltése
     if(!texture_load(&app->stars_texture, "assets/textures/stars.jpg")){
         fprintf(stderr, "WARN: Failed to load stars background: assets/textures/stars.jpg\n");
         texture_create_solid(&app->stars_texture, 8, 8, 16, 255);
     }
 
+    // Naprendszer inicializálása
     if(!solar_init(&app->solar, &app->sphere_mesh)){
         fprintf(stderr, "solar_init failed\n");
         texture_free(&app->stars_texture);
@@ -473,6 +519,7 @@ bool app_init(App *app, const char *title, int w, int h){
     return true;
 }
 
+// Az alkalmazás leállítása és erőforrások felszabadítása
 void app_shutdown(App *app){
     solar_shutdown(&app->solar);
     texture_free(&app->stars_texture);
@@ -488,6 +535,7 @@ void app_shutdown(App *app){
     SDL_Quit();
 }
 
+// A program fő ciklusa
 void app_run(App *app){
     while(app->running){
         unsigned int now = SDL_GetTicks();
@@ -501,6 +549,7 @@ void app_run(App *app){
 
         input_begin_frame(&app->input);
 
+        // SDL események feldolgozása
         {
             SDL_Event e;
             while(SDL_PollEvent(&e)){
@@ -519,18 +568,22 @@ void app_run(App *app){
             app->running = false;
         }
 
+        // Logika frissítése
         ui_update(&app->ui, dt);
         handle_input_and_camera(app, dt);
         solar_update(&app->solar, dt);
 
-        renderer_begin_frame(&app->renderer, app -> surface_mode);
+        // 3D jelenet renderelése
+        renderer_begin_frame(&app->renderer, app->surface_mode);
         renderer_set_3d(&app->renderer, &app->camera);
 
         draw_sky_sphere(app);
 
         if(app->surface_mode){
+            // Felszíni jelenet kirajzolása
             planet_scene_render(&app->planet_scene);
         }else{
+            // Naprendszer kirajzolása
             for(int i = 0; i < solar_count(&app->solar); i++){
                 Planet *p = solar_get(&app->solar, i);
 
@@ -543,6 +596,7 @@ void app_run(App *app){
                 glScalef(p->radius, p->radius, p->radius);
                 glRotatef(p->rotation_angle, 0.0f, 1.0f, 0.0f);
 
+                // Kiválasztott bolygó enyhe kiemelése
                 if(i == solar_selected_index(&app->solar) &&
                    !app->landing_in_progress){
                     glColor4f(1.15f, 1.15f, 1.15f, 1.0f);
@@ -555,6 +609,7 @@ void app_run(App *app){
             }
         }
 
+        // UI és képkocka lezárása
         ui_render_help_overlay(&app->ui, app->win_w, app->win_h);
         renderer_end_frame(&app->renderer);
         SDL_GL_SwapWindow(app->window);
