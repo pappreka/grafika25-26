@@ -7,6 +7,7 @@
 #include "input.h"
 #include "solar.h"
 
+
 // Felszíni objektum típusok
 typedef enum SurfaceObjectType{
     SURFACE_OBJECT_ROCK = 0,
@@ -154,5 +155,6 @@ const char *planet_scene_get_prompt(const PlanetScene *scene, Vec3 camera_positi
 
 // Render kamera alapján
 void planet_scene_render_with_camera(const PlanetScene *scene, const Camera *camera);
+
 
 #endif

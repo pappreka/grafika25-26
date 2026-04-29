@@ -5,15 +5,32 @@
   #include <windows.h>
 #endif
 #include <GL/gl.h>
-#include <GL/glu.h>
+
+#include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 // Perspektivikus vetítés beállítása
-static void set_perspective(int w, int h) {
+static void set_perspective(int w, int h)
+{
     float aspect = (h > 0) ? ((float)w / (float)h) : 1.0f;
+    float fovy_rad = 70.0f * (float)M_PI / 180.0f;
+    float f = 1.0f / tanf(fovy_rad * 0.5f);
+    float z_near = 0.1f;
+    float z_far = 20000.0f;
+
+    float m[16] = {
+        f / aspect, 0.0f, 0.0f, 0.0f,
+        0.0f, f, 0.0f, 0.0f,
+        0.0f, 0.0f, (z_far + z_near) / (z_near - z_far), -1.0f,
+        0.0f, 0.0f, (2.0f * z_far * z_near) / (z_near - z_far), 0.0f
+    };
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(70.0, (double)aspect, 0.1, 20000.0);
+    glLoadMatrixf(m);
     glMatrixMode(GL_MODELVIEW);
 }
 
@@ -74,11 +91,21 @@ void renderer_set_3d(Renderer *r, const Camera *cam) {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    gluLookAt(
-        (double)eye.x, (double)eye.y, (double)eye.z,
-        (double)center.x, (double)center.y, (double)center.z,
-        (double)up.x, (double)up.y, (double)up.z
-    );
+    {
+        Vec3 f = vec3_norm(vec3_sub(center, eye));
+        Vec3 s = vec3_norm(vec3_cross(f, up));
+        Vec3 u = vec3_cross(s, f);
+
+        float m[16] = {
+            s.x,  u.x, -f.x, 0.0f,
+            s.y,  u.y, -f.y, 0.0f,
+            s.z,  u.z, -f.z, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+
+        glMultMatrixf(m);
+        glTranslatef(-eye.x, -eye.y, -eye.z);
+    }  
 }
 
 // Világtengelyek és segédrács kirajzolása
